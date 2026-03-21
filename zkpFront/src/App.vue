@@ -85,7 +85,7 @@ const handleSubmit = async () => {
     // circuitInputs.identityTrapdoor = Math.floor(
     //   Math.random() * 1e18
     // ).toString()
-    circuitInputs.identityTrapdoor = "58315762554510183383427370759804617789238057472588115169775310276220776659880" // 固定值，实际使用时请替换为安全生成的随机数
+    circuitInputs.identityTrapdoor = "115791572332477245225286101332088830026253471201797469625690269566164313632543" // 固定值，实际使用时请替换为安全生成的随机数
 
     circuitInputs.root = ROOT
 
