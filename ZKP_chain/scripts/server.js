@@ -12,6 +12,7 @@ app.use(express.json())
 
 // ================== 加载数据 ==================
 const DATA_DIR = path.join(__dirname, "data")
+const VOTES_FILE = path.join(DATA_DIR, "votes.json")
 
 const TreeMeta = JSON.parse(
   fs.readFileSync(path.join(DATA_DIR, "tree_meta.json"))
@@ -77,6 +78,61 @@ function generateMerkleProof(leafIndex) {
     pathElements,
     pathIndices,
   }
+}
+
+function loadVotes() {
+  if (!fs.existsSync(VOTES_FILE)) {
+    return { votes: [] }
+  }
+
+  const raw = fs.readFileSync(VOTES_FILE, "utf8")
+
+  if (!raw.trim()) {
+    return { votes: [] }
+  }
+
+  const data = JSON.parse(raw)
+
+  if (!Array.isArray(data.votes)) {
+    return { votes: [] }
+  }
+
+  return data
+}
+
+function saveVotes(data) {
+  fs.writeFileSync(
+    VOTES_FILE,
+    JSON.stringify(data, null, 2) + "\n",
+    "utf8"
+  )
+}
+
+let voteWriteQueue = Promise.resolve()
+
+function persistVoteRecord(record) {
+  voteWriteQueue = voteWriteQueue.then(() => {
+    const votesData = loadVotes()
+    const duplicate = votesData.votes.find(
+      (item) =>
+        item.externalNullifier === record.externalNullifier &&
+        item.nullifierHash === record.nullifierHash
+    )
+
+    if (duplicate) {
+      const error = new Error("该用户已在当前活动中投过票")
+      error.code = "DUPLICATE_VOTE"
+      throw error
+    }
+
+    votesData.votes.push(record)
+    saveVotes(votesData)
+  })
+
+  return voteWriteQueue.catch((error) => {
+    voteWriteQueue = Promise.resolve()
+    throw error
+  })
 }
 
 // ================== 接口 ==================
@@ -171,19 +227,38 @@ app.post("/api/vote", async (req, res) => {
 
     const nullifierHash = publicSignals[0]
     const signalHash = publicSignals[1]
+    const voteRecord = {
+      externalNullifier: normalizedInput.externalNullifier,
+      nullifierHash,
+      signalHash,
+      vote: normalizedInput.vote,
+      root: normalizedInput.root,
+      createdAt: new Date().toISOString(),
+      proof,
+      publicSignals,
+    }
+
+    await persistVoteRecord(voteRecord)
 
     res.json({
       success: true,
       proof,
-      publicSignals: [
-        normalizedInput.root,
-        nullifierHash,
-        signalHash,
-      ],
+      publicSignals,
       nullifierHash,
       signalHash,
+      externalNullifier: normalizedInput.externalNullifier,
+      alreadyVoted: false,
     })
   } catch (err) {
+    if (err.code === "DUPLICATE_VOTE") {
+      return res.status(409).json({
+        success: false,
+        error: err.message,
+        alreadyVoted: true,
+        externalNullifier: String(req.body.externalNullifier),
+      })
+    }
+
     console.error("❌ proof 生成失败:", err)
 
     res.status(500).json({
