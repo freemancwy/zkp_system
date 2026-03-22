@@ -15,6 +15,11 @@ const DATA_DIR = path.join(__dirname, "data")
 const TREE_META_FILE = path.join(DATA_DIR, "tree_meta.json")
 const LEAVES_FILE = path.join(DATA_DIR, "leaves.json")
 const USERS_FILE = path.join(DATA_DIR, "users.json")
+const VOTES_FILE = path.join(DATA_DIR, "votes.json")
+const EXTERNAL_NULLIFIERS_FILE = path.join(
+  DATA_DIR,
+  "external_nullifiers.json"
+)
 const CIRCUIT_TREE_LEVELS = 20
 const MAX_LEAF_COUNT = 2 ** CIRCUIT_TREE_LEVELS
 const BN128_FIELD_SIZE = BigInt(
@@ -57,6 +62,18 @@ if (!Array.isArray(UsersData.users)) {
   UsersData.users = []
 }
 
+const VotesData = readJson(VOTES_FILE, { votes: [] })
+if (!Array.isArray(VotesData.votes)) {
+  VotesData.votes = []
+}
+
+const ExternalNullifiersData = readJson(EXTERNAL_NULLIFIERS_FILE, {
+  externalNullifiers: [],
+})
+if (!Array.isArray(ExternalNullifiersData.externalNullifiers)) {
+  ExternalNullifiersData.externalNullifiers = []
+}
+
 const LEAVES = LeavesData.leaves.map((value) => BigInt(value))
 
 let poseidon
@@ -90,6 +107,16 @@ function normalizeExternalNullifier(externalNullifier) {
   return normalized || null
 }
 
+function normalizeVote(vote) {
+  const normalized = String(vote)
+
+  if (normalized !== "0" && normalized !== "1") {
+    return null
+  }
+
+  return normalized
+}
+
 function randomFieldElement() {
   return BigInt(`0x${crypto.randomBytes(31).toString("hex")}`)
 }
@@ -105,6 +132,14 @@ function externalNullifierToField(externalNullifier) {
 
 function saveUsers() {
   writeJson(USERS_FILE, UsersData)
+}
+
+function saveVotes() {
+  writeJson(VOTES_FILE, VotesData)
+}
+
+function saveExternalNullifiers() {
+  writeJson(EXTERNAL_NULLIFIERS_FILE, ExternalNullifiersData)
 }
 
 function saveLeavesAndMeta() {
@@ -140,6 +175,19 @@ function findRegistration(phone, externalNullifier) {
   }
 
   return { user, registration }
+}
+
+function findVoteRecordByNullifierHash(nullifierHash) {
+  return (
+    VotesData.votes.find((item) => item.nullifierHash === nullifierHash) ??
+    null
+  )
+}
+
+function hasPublishedExternalNullifier(externalNullifier) {
+  return ExternalNullifiersData.externalNullifiers.some(
+    (item) => item.externalNullifier === externalNullifier
+  )
 }
 
 async function rebuildMerkleTree() {
@@ -220,6 +268,7 @@ async function generateMerkleProof(leafIndex) {
   }
 }
 
+// 查询 merkleTree 的根节点
 app.get("/api/root", (req, res) => {
   res.json({
     root: TreeMeta.root,
@@ -228,6 +277,50 @@ app.get("/api/root", (req, res) => {
   })
 })
 
+//发布活动
+app.post("/api/external-nullifier/publish", (req, res) => {
+  const externalNullifier = normalizeExternalNullifier(
+    req.body.externalNullifier
+  )
+
+  if (!externalNullifier) {
+    return res.status(400).json({
+      success: false,
+      error: "缺少活动标识",
+    })
+  }
+
+  if (hasPublishedExternalNullifier(externalNullifier)) {
+    return res.status(409).json({
+      success: false,
+      error: "活动标识已发布",
+      externalNullifier,
+    })
+  }
+
+  ExternalNullifiersData.externalNullifiers.push({
+    externalNullifier,
+    createdAt: new Date().toISOString(),
+  })
+  saveExternalNullifiers()
+
+  res.json({
+    success: true,
+    message: "externalNullifier发布成功",
+    externalNullifier,
+  })
+})
+
+//查询已经发布的活动
+app.get("/api/external-nullifiers", (req, res) => {
+  res.json({
+    success: true,
+    total: ExternalNullifiersData.externalNullifiers.length,
+    externalNullifiers: ExternalNullifiersData.externalNullifiers,
+  })
+})
+
+// 用户注册，提供手机号，登录时，输入手机号发送验证码登录
 app.post("/api/register", async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone)
@@ -238,21 +331,28 @@ app.post("/api/register", async (req, res) => {
     if (!phone) {
       return res.status(400).json({
         success: false,
-        error: "Invalid phone",
+        error: "无效手机号",
       })
     }
 
     if (!externalNullifier) {
       return res.status(400).json({
         success: false,
-        error: "Missing externalNullifier",
+        error: "缺少活动标识",
+      })
+    }
+
+    if (!hasPublishedExternalNullifier(externalNullifier)) {
+      return res.status(400).json({
+        success: false,
+        error: "活动未发布",
       })
     }
 
     if (LEAVES.length >= MAX_LEAF_COUNT) {
       return res.status(400).json({
         success: false,
-        error: `Merkle tree is full (max ${MAX_LEAF_COUNT} leaves)`,
+        error: `存储树已满(最大${MAX_LEAF_COUNT}节点)`,
       })
     }
 
@@ -260,7 +360,7 @@ app.post("/api/register", async (req, res) => {
     if (existing) {
       return res.status(409).json({
         success: false,
-        error: "User already registered for this externalNullifier",
+        error: "用户已经注册过此活动",
         phone,
         externalNullifier,
         commitment: existing.registration.commitment,
@@ -300,7 +400,7 @@ app.post("/api/register", async (req, res) => {
 
     res.json({
       success: true,
-      message: "User registered successfully",
+      message: "注册成功",
       phone,
       externalNullifier,
       identityNullifier: registration.identityNullifier,
@@ -310,7 +410,7 @@ app.post("/api/register", async (req, res) => {
       leafCount: TreeMeta.leafCount,
     })
   } catch (error) {
-    console.error("Register failed:", error)
+    console.error("注册失败", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -318,6 +418,7 @@ app.post("/api/register", async (req, res) => {
   }
 })
 
+// 根据用户提供的手机号和活动id查找证明信息，pathElements和pathIndices
 app.post("/api/merkle-proof", async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone)
@@ -328,7 +429,14 @@ app.post("/api/merkle-proof", async (req, res) => {
     if (!phone || !externalNullifier) {
       return res.status(400).json({
         success: false,
-        error: "Missing phone or externalNullifier",
+        error: "缺少手机号和活动标识",
+      })
+    }
+
+    if (!hasPublishedExternalNullifier(externalNullifier)) {
+      return res.status(400).json({
+        success: false,
+        error: "活动未发布",
       })
     }
 
@@ -337,7 +445,7 @@ app.post("/api/merkle-proof", async (req, res) => {
     if (!record) {
       return res.status(404).json({
         success: false,
-        error: "Registration not found",
+        error: "未注册",
       })
     }
 
@@ -347,7 +455,7 @@ app.post("/api/merkle-proof", async (req, res) => {
     if (index === -1) {
       return res.status(404).json({
         success: false,
-        error: "Commitment not found in Merkle tree",
+        error: "该用户不在活动中",
       })
     }
 
@@ -362,7 +470,7 @@ app.post("/api/merkle-proof", async (req, res) => {
       ...proof,
     })
   } catch (error) {
-    console.error("Merkle proof generation failed:", error)
+    console.error("proof生成失败", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -370,9 +478,15 @@ app.post("/api/merkle-proof", async (req, res) => {
   }
 })
 
+// 用户投票
 app.post("/api/vote", async (req, res) => {
   try {
     const input = req.body
+    const externalNullifier = normalizeExternalNullifier(
+      input.externalNullifier
+    )
+    const vote = normalizeVote(input.vote)
+
     const requiredFields = [
       "identityNullifier",
       "identityTrapdoor",
@@ -387,22 +501,43 @@ app.post("/api/vote", async (req, res) => {
       if (input[key] === undefined) {
         return res.status(400).json({
           success: false,
-          error: `Missing field: ${key}`,
+          error: `缺少导致失败${key}`,
         })
       }
+    }
+
+    if (!externalNullifier) {
+      return res.status(400).json({
+        success: false,
+        error: "无效的活动标识",
+      })
+    }
+
+    if (!hasPublishedExternalNullifier(externalNullifier)) {
+      return res.status(400).json({
+        success: false,
+        error: "活动未发布",
+      })
+    }
+
+    if (!vote) {
+      return res.status(400).json({
+        success: false,
+        error: "vote不合法",
+      })
     }
 
     if (input.treePathElements.length !== TreeMeta.depth) {
       return res.status(400).json({
         success: false,
-        error: `pathElements length must equal ${TreeMeta.depth}`,
+        error: `pathElements长度不等于${TreeMeta.depth}`,
       })
     }
 
     if (input.treePathIndices.length !== TreeMeta.depth) {
       return res.status(400).json({
         success: false,
-        error: `pathIndices length must equal ${TreeMeta.depth}`,
+        error: `pathIndices长度不等于${TreeMeta.depth}`,
       })
     }
 
@@ -412,10 +547,8 @@ app.post("/api/vote", async (req, res) => {
       treePathElements: input.treePathElements.map(String),
       treePathIndices: input.treePathIndices.map(String),
       root: String(input.root),
-      externalNullifier: externalNullifierToField(
-        String(input.externalNullifier)
-      ),
-      vote: String(input.vote),
+      externalNullifier: externalNullifierToField(externalNullifier),
+      vote,
     }
 
     const wasmPath = path.join(__dirname, "../build/circuit_js/circuit.wasm")
@@ -430,6 +563,28 @@ app.post("/api/vote", async (req, res) => {
     const nullifierHash = publicSignals[0]
     const signalHash = publicSignals[1]
 
+    const existingVote = findVoteRecordByNullifierHash(nullifierHash)
+
+    if (existingVote) {
+      return res.status(409).json({
+        success: false,
+        error: "活动重复投票",
+        externalNullifier,
+        nullifierHash,
+      })
+    }
+
+    const voteRecord = {
+      externalNullifier,
+      vote,
+      nullifierHash,
+      signalHash,
+      createdAt: new Date().toISOString(),
+    }
+
+    VotesData.votes.push(voteRecord)
+    saveVotes()
+
     res.json({
       success: true,
       proof,
@@ -437,14 +592,48 @@ app.post("/api/vote", async (req, res) => {
       externalNullifierField: normalizedInput.externalNullifier,
       nullifierHash,
       signalHash,
+      voteRecord,
     })
   } catch (error) {
-    console.error("Vote failed:", error)
+    console.error("投票失败", error)
     res.status(500).json({
       success: false,
       error: error.message,
     })
   }
+})
+
+// 根据活动id查询投票情况
+app.get("/api/activity-stats/:externalNullifier", (req, res) => {
+  const externalNullifier = normalizeExternalNullifier(
+    req.params.externalNullifier
+  )
+
+  if (!externalNullifier) {
+    return res.status(400).json({
+      success: false,
+      error: "无效id",
+    })
+  }
+
+  const activityVotes = VotesData.votes.filter(
+    (item) => item.externalNullifier === externalNullifier
+  )
+
+  res.json({
+    success: true,
+    externalNullifier,
+    totalVoters: activityVotes.length,
+    voteCounts: {
+      support: activityVotes.filter((item) => item.vote === "1").length,
+      against: activityVotes.filter((item) => item.vote === "0").length,
+    },
+    voters: activityVotes.map((item) => ({
+      vote: item.vote,
+      votedAt: item.createdAt,
+      nullifierHash: item.nullifierHash,
+    })),
+  })
 })
 
 const PORT = 3000
