@@ -26,10 +26,14 @@ const LEAVES = LeavesData.leaves.map((x) => BigInt(x))
 // Poseidon 初始化（全局复用）
 let poseidon, F
 
-;(async () => {
+async function init() {
   poseidon = await buildPoseidon()
   F = poseidon.F
-})()
+
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running at http://localhost:${PORT}`)
+  })
+}
 
 // ================== 工具函数 ==================
 
@@ -40,6 +44,10 @@ function findLeafIndex(commitment) {
 
 // 动态构建 Merkle proof（与你脚本一致）
 function generateMerkleProof(leafIndex) {
+  if (!poseidon || !F) {
+    throw new Error("Poseidon 尚未初始化完成")
+  }
+
   const pathElements = []
   const pathIndices = []
 
@@ -196,6 +204,7 @@ app.post("/api/vote", async (req, res) => {
 // ================== 启动 ==================
 const PORT = 3000
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running at http://localhost:${PORT}`)
+init().catch((err) => {
+  console.error("❌ Poseidon 初始化失败:", err)
+  process.exit(1)
 })
