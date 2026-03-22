@@ -17,6 +17,9 @@ const LEAVES_FILE = path.join(DATA_DIR, "leaves.json")
 const USERS_FILE = path.join(DATA_DIR, "users.json")
 const CIRCUIT_TREE_LEVELS = 20
 const MAX_LEAF_COUNT = 2 ** CIRCUIT_TREE_LEVELS
+const BN128_FIELD_SIZE = BigInt(
+  "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+)
 
 function readJson(filePath, fallback) {
   if (!fs.existsSync(filePath)) {
@@ -89,6 +92,15 @@ function normalizeExternalNullifier(externalNullifier) {
 
 function randomFieldElement() {
   return BigInt(`0x${crypto.randomBytes(31).toString("hex")}`)
+}
+
+function externalNullifierToField(externalNullifier) {
+  const hashHex = crypto
+    .createHash("sha256")
+    .update(externalNullifier, "utf8")
+    .digest("hex")
+
+  return (BigInt(`0x${hashHex}`) % BN128_FIELD_SIZE).toString()
 }
 
 function saveUsers() {
@@ -182,7 +194,8 @@ async function generateMerkleProof(leafIndex) {
   while (current.length > 1) {
     const isRight = index % 2
     const pairIndex = isRight ? index - 1 : index + 1
-    const sibling = pairIndex < current.length ? current[pairIndex] : current[index]
+    const sibling =
+      pairIndex < current.length ? current[pairIndex] : current[index]
 
     pathElements.push(sibling.toString())
     pathIndices.push(isRight)
@@ -207,7 +220,6 @@ async function generateMerkleProof(leafIndex) {
   }
 }
 
-
 app.get("/api/root", (req, res) => {
   res.json({
     root: TreeMeta.root,
@@ -215,7 +227,6 @@ app.get("/api/root", (req, res) => {
     leafCount: TreeMeta.leafCount,
   })
 })
-
 
 app.post("/api/register", async (req, res) => {
   try {
@@ -227,21 +238,21 @@ app.post("/api/register", async (req, res) => {
     if (!phone) {
       return res.status(400).json({
         success: false,
-        error: "无效的手机号码",
+        error: "Invalid phone",
       })
     }
 
     if (!externalNullifier) {
       return res.status(400).json({
         success: false,
-        error: "未填写活动唯一标识",
+        error: "Missing externalNullifier",
       })
     }
 
     if (LEAVES.length >= MAX_LEAF_COUNT) {
       return res.status(400).json({
         success: false,
-        error: `MerkleTree已满(最大${MAX_LEAF_COUNT}叶子)`,
+        error: `Merkle tree is full (max ${MAX_LEAF_COUNT} leaves)`,
       })
     }
 
@@ -249,7 +260,7 @@ app.post("/api/register", async (req, res) => {
     if (existing) {
       return res.status(409).json({
         success: false,
-        error: "用户已经注册过该活动",
+        error: "User already registered for this externalNullifier",
         phone,
         externalNullifier,
         commitment: existing.registration.commitment,
@@ -289,7 +300,7 @@ app.post("/api/register", async (req, res) => {
 
     res.json({
       success: true,
-      message: "注册成功",
+      message: "User registered successfully",
       phone,
       externalNullifier,
       identityNullifier: registration.identityNullifier,
@@ -299,7 +310,7 @@ app.post("/api/register", async (req, res) => {
       leafCount: TreeMeta.leafCount,
     })
   } catch (error) {
-    console.error("注册失败", error)
+    console.error("Register failed:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -314,34 +325,29 @@ app.post("/api/merkle-proof", async (req, res) => {
       req.body.externalNullifier
     )
 
-    let identityCommitment = req.body.identityCommitment
-
-    if (phone && externalNullifier) {
-      const record = findRegistration(phone, externalNullifier)
-
-      if (!record) {
-        return res.status(404).json({
-          success: false,
-          error: "未注册",
-        })
-      }
-
-      identityCommitment = record.registration.commitment
-    }
-
-    if (!identityCommitment) {
+    if (!phone || !externalNullifier) {
       return res.status(400).json({
         success: false,
-        error: "缺失identityCommitment或phone/externalNullifier",
+        error: "Missing phone or externalNullifier",
       })
     }
 
+    const record = findRegistration(phone, externalNullifier)
+
+    if (!record) {
+      return res.status(404).json({
+        success: false,
+        error: "Registration not found",
+      })
+    }
+
+    const identityCommitment = record.registration.commitment
     const index = findLeafIndex(identityCommitment)
 
     if (index === -1) {
       return res.status(404).json({
         success: false,
-        error: "Commitment未发现",
+        error: "Commitment not found in Merkle tree",
       })
     }
 
@@ -356,7 +362,7 @@ app.post("/api/merkle-proof", async (req, res) => {
       ...proof,
     })
   } catch (error) {
-    console.error("Merkleproof生成失败:", error)
+    console.error("Merkle proof generation failed:", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -364,8 +370,6 @@ app.post("/api/merkle-proof", async (req, res) => {
   }
 })
 
-
-//投票接口
 app.post("/api/vote", async (req, res) => {
   try {
     const input = req.body
@@ -383,7 +387,7 @@ app.post("/api/vote", async (req, res) => {
       if (input[key] === undefined) {
         return res.status(400).json({
           success: false,
-          error: `未填写字段: ${key}`,
+          error: `Missing field: ${key}`,
         })
       }
     }
@@ -391,14 +395,14 @@ app.post("/api/vote", async (req, res) => {
     if (input.treePathElements.length !== TreeMeta.depth) {
       return res.status(400).json({
         success: false,
-        error: `pathElements长度必须等于${TreeMeta.depth}`,
+        error: `pathElements length must equal ${TreeMeta.depth}`,
       })
     }
 
     if (input.treePathIndices.length !== TreeMeta.depth) {
       return res.status(400).json({
         success: false,
-        error: `pathIndices长度必须等于${TreeMeta.depth}`,
+        error: `pathIndices length must equal ${TreeMeta.depth}`,
       })
     }
 
@@ -408,7 +412,9 @@ app.post("/api/vote", async (req, res) => {
       treePathElements: input.treePathElements.map(String),
       treePathIndices: input.treePathIndices.map(String),
       root: String(input.root),
-      externalNullifier: String(input.externalNullifier),
+      externalNullifier: externalNullifierToField(
+        String(input.externalNullifier)
+      ),
       vote: String(input.vote),
     }
 
@@ -428,11 +434,12 @@ app.post("/api/vote", async (req, res) => {
       success: true,
       proof,
       publicSignals: [normalizedInput.root, nullifierHash, signalHash],
+      externalNullifierField: normalizedInput.externalNullifier,
       nullifierHash,
       signalHash,
     })
   } catch (error) {
-    console.error("投票无效:", error)
+    console.error("Vote failed:", error)
     res.status(500).json({
       success: false,
       error: error.message,
