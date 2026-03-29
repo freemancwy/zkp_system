@@ -1,14 +1,23 @@
 {
   "name": "zkp_chain",
   "version": "1.0.0",
-  "description": "",
+  "description": "ZKP privacy voting demo with a minimal Hardhat environment",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Use scripts/test.ps1 or scripts/test.bash for backend regression tests\" && exit 0",
+    "hardhat:node": "hardhat node",
+    "hardhat:compile": "hardhat compile",
+    "hardhat:deploy": "hardhat run scripts/deploy.js --network localhost",
+    "hardhat:export-verifier": "snarkjs zkey export solidityverifier zkey/circuit_final.zkey contracts/Verifier.sol",
+    "hardhat:submit-vote": "hardhat run scripts/submitVoteOnChain.js --network localhost"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.10"
+  },
   "dependencies": {
     "@semaphore-protocol/circuits": "^4.14.2",
     "circomlib": "^2.0.5",

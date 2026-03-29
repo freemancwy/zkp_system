@@ -1,0 +1,114 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "C:\\Users\\25624\\Desktop\\project\\zkp_system\\ZKP_chain\\contracts\\MinimalVoting.sol": {
+      "lastModificationDate": 1774761307841,
+      "contentHash": "a50fb75b28f04f9722a8392aae465fe1",
+      "sourceName": "contracts/MinimalVoting.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MinimalVoting"
+      ]
+    },
+    "C:\\Users\\25624\\Desktop\\project\\zkp_system\\ZKP_chain\\contracts\\Verifier.sol": {
+      "lastModificationDate": 1774763359022,
+      "contentHash": "4f431d05544b910c49ef4414bd99d39b",
+      "sourceName": "contracts/Verifier.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        ">=0.7.0 <0.9.0"
+      ],
+      "artifacts": [
+        "Groth16Verifier"
+      ]
+    },
+    "C:\\Users\\25624\\Desktop\\project\\zkp_system\\ZKP_chain\\contracts\\VotingWithVerifier.sol": {
+      "lastModificationDate": 1774763533594,
+      "contentHash": "baed615fdf22a90a56ce0df4f522cd7e",
+      "sourceName": "contracts/VotingWithVerifier.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "IGroth16Verifier",
+        "VotingWithVerifier"
+      ]
+    }
+  }
+}

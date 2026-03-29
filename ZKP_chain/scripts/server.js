@@ -614,7 +614,8 @@ app.post("/api/vote", async (req, res) => {
     res.json({
       success: true,
       proof,
-      publicSignals: [normalizedInput.root, nullifierHash, signalHash],
+      publicSignals,
+      merkleRoot: normalizedInput.root,
       externalNullifierField: normalizedInput.externalNullifier,
       nullifierHash,
       signalHash,
