@@ -74,15 +74,31 @@ if (!Array.isArray(ExternalNullifiersData.externalNullifiers)) {
   ExternalNullifiersData.externalNullifiers = []
 }
 
-const LEAVES = LeavesData.leaves.map((value) => BigInt(value))
+const LEAVES = []
 
 let poseidon
 let F
+let ZERO_VALUES = []
 
 const poseidonReady = (async () => {
   poseidon = await buildPoseidon()
   F = poseidon.F
 })()
+
+async function ensureZeroValues() {
+  await poseidonReady
+
+  if (ZERO_VALUES.length === CIRCUIT_TREE_LEVELS + 1) {
+    return
+  }
+
+  ZERO_VALUES = [0n]
+
+  for (let level = 0; level < CIRCUIT_TREE_LEVELS; level += 1) {
+    const nextZero = poseidon([ZERO_VALUES[level], ZERO_VALUES[level]])
+    ZERO_VALUES.push(F.toObject(nextZero))
+  }
+}
 
 function normalizePhone(phone) {
   if (typeof phone !== "string") {
@@ -158,23 +174,81 @@ function findUser(phone) {
   return UsersData.users.find((user) => user.phone === phone) ?? null
 }
 
-function findRegistration(phone, externalNullifier) {
-  const user = findUser(phone)
-
-  if (!user) {
+function pickLegacyRegistration(registrations) {
+  if (!Array.isArray(registrations) || registrations.length === 0) {
     return null
   }
 
-  const registration =
-    user.registrations.find(
-      (item) => item.externalNullifier === externalNullifier
-    ) ?? null
+  const sorted = [...registrations].sort((a, b) => {
+    const aTime = Date.parse(a.createdAt ?? 0)
+    const bTime = Date.parse(b.createdAt ?? 0)
+    return aTime - bTime
+  })
 
-  if (!registration) {
+  return sorted[0] ?? null
+}
+
+function normalizeUserRecord(user) {
+  if (!user || typeof user.phone !== "string") {
     return null
   }
 
-  return { user, registration }
+  if (
+    typeof user.identityNullifier === "string" &&
+    typeof user.identityTrapdoor === "string" &&
+    typeof user.commitment === "string"
+  ) {
+    return {
+      phone: user.phone,
+      identityNullifier: user.identityNullifier,
+      identityTrapdoor: user.identityTrapdoor,
+      commitment: user.commitment,
+      createdAt: user.createdAt ?? new Date(0).toISOString(),
+    }
+  }
+
+  const legacyRegistration = pickLegacyRegistration(user.registrations)
+  if (!legacyRegistration) {
+    return null
+  }
+
+  return {
+    phone: user.phone,
+    identityNullifier: String(legacyRegistration.identityNullifier),
+    identityTrapdoor: String(legacyRegistration.identityTrapdoor),
+    commitment: String(legacyRegistration.commitment),
+    createdAt: legacyRegistration.createdAt ?? new Date(0).toISOString(),
+  }
+}
+
+function synchronizeUsersAndLeaves() {
+  const normalizedUsers = []
+
+  for (const user of UsersData.users) {
+    const normalizedUser = normalizeUserRecord(user)
+    if (normalizedUser) {
+      normalizedUsers.push(normalizedUser)
+    }
+  }
+
+  normalizedUsers.sort((a, b) => {
+    const aTime = Date.parse(a.createdAt ?? 0)
+    const bTime = Date.parse(b.createdAt ?? 0)
+    return aTime - bTime
+  })
+
+  const usersChanged =
+    JSON.stringify(UsersData.users) !== JSON.stringify(normalizedUsers)
+  UsersData.users = normalizedUsers
+
+  LEAVES.length = 0
+  for (const user of normalizedUsers) {
+    LEAVES.push(BigInt(user.commitment))
+  }
+
+  if (usersChanged) {
+    saveUsers()
+  }
 }
 
 function findVoteRecordByNullifierHash(nullifierHash) {
@@ -191,36 +265,31 @@ function hasPublishedExternalNullifier(externalNullifier) {
 }
 
 async function rebuildMerkleTree() {
-  await poseidonReady
-
-  if (LEAVES.length === 0) {
-    TreeMeta.root = null
-    TreeMeta.depth = 0
-    TreeMeta.leafCount = 0
-    saveLeavesAndMeta()
-    return
-  }
+  await ensureZeroValues()
 
   let current = [...LEAVES]
-  let depth = 0
 
-  while (current.length > 1) {
+  for (let level = 0; level < CIRCUIT_TREE_LEVELS; level += 1) {
     const next = []
+    const zero = ZERO_VALUES[level]
 
     for (let i = 0; i < current.length; i += 2) {
       const left = current[i]
-      const right = current[i + 1] ?? current[i]
+      const right = current[i + 1] ?? zero
       const hash = poseidon([left, right])
 
       next.push(F.toObject(hash))
     }
 
+    if (next.length === 0) {
+      next.push(ZERO_VALUES[level + 1])
+    }
+
     current = next
-    depth += 1
   }
 
   TreeMeta.root = current[0].toString()
-  TreeMeta.depth = depth
+  TreeMeta.depth = CIRCUIT_TREE_LEVELS
   TreeMeta.leafCount = LEAVES.length
   saveLeavesAndMeta()
 }
@@ -232,33 +301,34 @@ async function createCommitment(identityNullifier, identityTrapdoor) {
 }
 
 async function generateMerkleProof(leafIndex) {
-  await poseidonReady
+  await ensureZeroValues()
 
   const pathElements = []
   const pathIndices = []
   let current = [...LEAVES]
   let index = leafIndex
 
-  while (current.length > 1) {
+  for (let level = 0; level < CIRCUIT_TREE_LEVELS; level += 1) {
     const isRight = index % 2
     const pairIndex = isRight ? index - 1 : index + 1
     const sibling =
-      pairIndex < current.length ? current[pairIndex] : current[index]
+      pairIndex < current.length ? current[pairIndex] : ZERO_VALUES[level]
 
     pathElements.push(sibling.toString())
     pathIndices.push(isRight)
 
     const next = []
+    const zero = ZERO_VALUES[level]
 
     for (let i = 0; i < current.length; i += 2) {
       const left = current[i]
-      const right = current[i + 1] ?? current[i]
+      const right = current[i + 1] ?? zero
       const hash = poseidon([left, right])
 
       next.push(F.toObject(hash))
     }
 
-    current = next
+    current = next.length > 0 ? next : [ZERO_VALUES[level + 1]]
     index = Math.floor(index / 2)
   }
 
@@ -268,7 +338,7 @@ async function generateMerkleProof(leafIndex) {
   }
 }
 
-// 查询 merkleTree 的根节点
+
 app.get("/api/root", (req, res) => {
   res.json({
     root: TreeMeta.root,
@@ -277,7 +347,6 @@ app.get("/api/root", (req, res) => {
   })
 })
 
-//发布活动
 app.post("/api/external-nullifier/publish", (req, res) => {
   const externalNullifier = normalizeExternalNullifier(
     req.body.externalNullifier
@@ -311,7 +380,6 @@ app.post("/api/external-nullifier/publish", (req, res) => {
   })
 })
 
-//查询已经发布的活动
 app.get("/api/external-nullifiers", (req, res) => {
   res.json({
     success: true,
@@ -320,13 +388,9 @@ app.get("/api/external-nullifiers", (req, res) => {
   })
 })
 
-// 用户注册，提供手机号，登录时，输入手机号发送验证码登录
 app.post("/api/register", async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone)
-    const externalNullifier = normalizeExternalNullifier(
-      req.body.externalNullifier
-    )
 
     if (!phone) {
       return res.status(400).json({
@@ -335,35 +399,20 @@ app.post("/api/register", async (req, res) => {
       })
     }
 
-    if (!externalNullifier) {
-      return res.status(400).json({
-        success: false,
-        error: "缺少活动标识",
-      })
-    }
-
-    if (!hasPublishedExternalNullifier(externalNullifier)) {
-      return res.status(400).json({
-        success: false,
-        error: "活动未发布",
-      })
-    }
-
     if (LEAVES.length >= MAX_LEAF_COUNT) {
       return res.status(400).json({
         success: false,
-        error: `存储树已满(最大${MAX_LEAF_COUNT}节点)`,
+        error: `存储树已满(最大 ${MAX_LEAF_COUNT} 节点)`,
       })
     }
 
-    const existing = findRegistration(phone, externalNullifier)
-    if (existing) {
+    const existingUser = findUser(phone)
+    if (existingUser) {
       return res.status(409).json({
         success: false,
-        error: "用户已经注册过此活动",
+        error: "用户已经注册",
         phone,
-        externalNullifier,
-        commitment: existing.registration.commitment,
+        commitment: existingUser.commitment,
       })
     }
 
@@ -374,8 +423,7 @@ app.post("/api/register", async (req, res) => {
       identityTrapdoor
     )
 
-    const registration = {
-      externalNullifier,
+    const user = {
       phone,
       identityNullifier: identityNullifier.toString(),
       identityTrapdoor: identityTrapdoor.toString(),
@@ -383,16 +431,7 @@ app.post("/api/register", async (req, res) => {
       createdAt: new Date().toISOString(),
     }
 
-    let user = findUser(phone)
-    if (!user) {
-      user = {
-        phone,
-        registrations: [],
-      }
-      UsersData.users.push(user)
-    }
-
-    user.registrations.push(registration)
+    UsersData.users.push(user)
     saveUsers()
 
     LEAVES.push(BigInt(commitment))
@@ -402,10 +441,9 @@ app.post("/api/register", async (req, res) => {
       success: true,
       message: "注册成功",
       phone,
-      externalNullifier,
-      identityNullifier: registration.identityNullifier,
-      identityTrapdoor: registration.identityTrapdoor,
-      commitment: registration.commitment,
+      identityNullifier: user.identityNullifier,
+      identityTrapdoor: user.identityTrapdoor,
+      commitment: user.commitment,
       root: TreeMeta.root,
       leafCount: TreeMeta.leafCount,
     })
@@ -418,44 +456,32 @@ app.post("/api/register", async (req, res) => {
   }
 })
 
-// 根据用户提供的手机号和活动id查找证明信息，pathElements和pathIndices
 app.post("/api/merkle-proof", async (req, res) => {
   try {
     const phone = normalizePhone(req.body.phone)
-    const externalNullifier = normalizeExternalNullifier(
-      req.body.externalNullifier
-    )
 
-    if (!phone || !externalNullifier) {
+    if (!phone) {
       return res.status(400).json({
         success: false,
-        error: "缺少手机号和活动标识",
+        error: "缺少手机号",
       })
     }
 
-    if (!hasPublishedExternalNullifier(externalNullifier)) {
-      return res.status(400).json({
-        success: false,
-        error: "活动未发布",
-      })
-    }
-
-    const record = findRegistration(phone, externalNullifier)
-
-    if (!record) {
+    const user = findUser(phone)
+    if (!user) {
       return res.status(404).json({
         success: false,
-        error: "未注册",
+        error: "用户未注册",
       })
     }
 
-    const identityCommitment = record.registration.commitment
+    const identityCommitment = user.commitment
     const index = findLeafIndex(identityCommitment)
 
     if (index === -1) {
       return res.status(404).json({
         success: false,
-        error: "该用户不在活动中",
+        error: "用户不在默克尔树中",
       })
     }
 
@@ -463,6 +489,7 @@ app.post("/api/merkle-proof", async (req, res) => {
 
     res.json({
       success: true,
+      phone,
       root: TreeMeta.root,
       depth: TreeMeta.depth,
       identityCommitment: String(identityCommitment),
@@ -478,7 +505,6 @@ app.post("/api/merkle-proof", async (req, res) => {
   }
 })
 
-// 用户投票
 app.post("/api/vote", async (req, res) => {
   try {
     const input = req.body
@@ -501,7 +527,7 @@ app.post("/api/vote", async (req, res) => {
       if (input[key] === undefined) {
         return res.status(400).json({
           success: false,
-          error: `缺少导致失败${key}`,
+          error: `缺少必要参数: ${key}`,
         })
       }
     }
@@ -527,14 +553,14 @@ app.post("/api/vote", async (req, res) => {
       })
     }
 
-    if (input.treePathElements.length !== TreeMeta.depth) {
+    if (input.treePathElements.length !== CIRCUIT_TREE_LEVELS) {
       return res.status(400).json({
         success: false,
         error: `pathElements长度不等于${TreeMeta.depth}`,
       })
     }
 
-    if (input.treePathIndices.length !== TreeMeta.depth) {
+    if (input.treePathIndices.length !== CIRCUIT_TREE_LEVELS) {
       return res.status(400).json({
         success: false,
         error: `pathIndices长度不等于${TreeMeta.depth}`,
@@ -603,7 +629,6 @@ app.post("/api/vote", async (req, res) => {
   }
 })
 
-// 根据活动id查询投票情况
 app.get("/api/activity-stats/:externalNullifier", (req, res) => {
   const externalNullifier = normalizeExternalNullifier(
     req.params.externalNullifier
@@ -638,6 +663,16 @@ app.get("/api/activity-stats/:externalNullifier", (req, res) => {
 
 const PORT = 3000
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`)
-})
+;(async () => {
+  try {
+    synchronizeUsersAndLeaves()
+    await rebuildMerkleTree()
+
+    app.listen(PORT, () => {
+      console.log(`Server running at http://localhost:${PORT}`)
+    })
+  } catch (error) {
+    console.error("Server启动失败", error)
+    process.exit(1)
+  }
+})()
