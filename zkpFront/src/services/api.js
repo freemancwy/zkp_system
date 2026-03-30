@@ -29,10 +29,10 @@ export function getActivities() {
   return request("/api/external-nullifiers")
 }
 
-export function publishActivity(externalNullifier) {
+export function publishActivity(payload) {
   return request("/api/external-nullifier/publish", {
     method: "POST",
-    body: JSON.stringify({ externalNullifier }),
+    body: JSON.stringify(payload),
   })
 }
 

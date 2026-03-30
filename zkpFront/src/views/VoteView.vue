@@ -2,11 +2,11 @@
   <div class="page-stack">
     <section class="section-heading">
       <div>
-        <p class="eyebrow">User Flow</p>
+        <p class="eyebrow">用户流程</p>
         <h2>注册、恢复身份并参与匿名投票</h2>
       </div>
       <p class="section-note">
-        当前浏览器保存的匿名身份是本次演示的唯一凭据，请不要随意清除。
+        当前浏览器中保存的匿名身份是本次演示的重要依据，请不要随意清除。
       </p>
     </section>
 

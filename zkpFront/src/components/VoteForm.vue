@@ -2,22 +2,23 @@
   <section class="panel">
     <div class="panel-header">
       <div>
-        <p class="eyebrow">Anonymous Ballot</p>
+        <p class="eyebrow">匿名投票</p>
         <h2>提交匿名投票</h2>
       </div>
       <span class="status-badge" :data-status="voteStatus">{{ statusText }}</span>
     </div>
 
     <p class="panel-copy">
-      页面会自动读取本地保存的匿名身份，并在提交时向后端申请 Merkle Proof，再生成证明完成投票。
+      页面会使用当前浏览器中保存的匿名身份，向后端申请 Merkle Proof，
+      生成证明后再将投票结果提交上链。
     </p>
 
     <div v-if="!hasIdentity" class="empty-state">
-      当前浏览器没有可用身份，请先完成注册或恢复身份。
+      当前浏览器中没有可用的本地身份，请先注册或恢复身份。
     </div>
 
     <div v-else-if="!activities.length" class="empty-state">
-      暂无已发布活动，请先前往管理员页发布活动。
+      当前还没有可投票的活动，请先在管理页发布活动。
     </div>
 
     <form v-else class="stack-form" @submit.prevent="handleSubmit">
@@ -30,10 +31,17 @@
             :key="activity.externalNullifier"
             :value="activity.externalNullifier"
           >
-            {{ activity.externalNullifier }}
+            {{ activity.name || activity.externalNullifier }}
           </option>
         </select>
       </label>
+
+      <div v-if="selectedActivityMeta" class="panel-copy">
+        <strong>{{ selectedActivityMeta.name || selectedActivityMeta.externalNullifier }}</strong>
+        <span v-if="selectedActivityMeta.descrption">
+          : {{ selectedActivityMeta.descrption }}
+        </span>
+      </div>
 
       <div class="vote-grid">
         <button
@@ -55,14 +63,14 @@
           type="submit"
           :disabled="voteStatus === STATUS.LOADING || !selectedActivity || !selectedVote"
         >
-          {{ voteStatus === STATUS.LOADING ? "证明生成中..." : "生成证明并投票" }}
+          {{ voteStatus === STATUS.LOADING ? "提交中..." : "生成证明并投票" }}
         </button>
         <router-link
           v-if="selectedActivity"
           class="ghost-button"
           :to="`/activity/${encodeURIComponent(selectedActivity)}`"
         >
-          查看该活动统计
+          查看活动统计
         </router-link>
       </div>
     </form>
@@ -72,20 +80,20 @@
     <div v-if="result" class="result-card">
       <div class="result-header">
         <div>
-          <p class="eyebrow">Proof Result</p>
-          <h3>证明已生成</h3>
+          <p class="eyebrow">证明结果</p>
+          <h3>投票已提交</h3>
         </div>
         <router-link
           class="ghost-button"
           :to="`/activity/${encodeURIComponent(result.voteRecord.externalNullifier)}`"
         >
-          跳转统计页
+          打开统计页
         </router-link>
       </div>
 
       <div class="result-grid">
         <div>
-          <span>活动</span>
+          <span>活动编号</span>
           <code>{{ result.voteRecord.externalNullifier }}</code>
         </div>
         <div>
@@ -102,9 +110,16 @@
         </div>
       </div>
 
-      <button class="ghost-button" type="button" disabled>
-        提交到合约（Coming Soon）
-      </button>
+      <div v-if="result.onChain" class="result-grid">
+        <div>
+          <span>链上交易哈希</span>
+          <code>{{ shorten(result.onChain.txHash) }}</code>
+        </div>
+        <div>
+          <span>区块高度</span>
+          <code>{{ result.onChain.blockNumber }}</code>
+        </div>
+      </div>
     </div>
   </section>
 </template>
@@ -127,6 +142,11 @@ const emit = defineEmits(["submit"])
 const voteOptions = VOTE_OPTIONS
 const selectedActivity = ref(props.initialActivity)
 const selectedVote = ref("1")
+const selectedActivityMeta = computed(() =>
+  props.activities.find(
+    (activity) => activity.externalNullifier === selectedActivity.value
+  ) ?? null
+)
 
 watch(
   () => props.initialActivity,
@@ -143,7 +163,7 @@ const statusText = computed(() => {
     case STATUS.LOADING:
       return "处理中"
     case STATUS.SUCCESS:
-      return "已完成"
+      return "成功"
     case STATUS.ERROR:
       return "异常"
     default:

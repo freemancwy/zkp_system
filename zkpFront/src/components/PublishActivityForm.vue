@@ -2,23 +2,41 @@
   <section class="panel">
     <div class="panel-header">
       <div>
-        <p class="eyebrow">Admin Console</p>
+        <p class="eyebrow">管理员控制台</p>
         <h2>发布投票活动</h2>
       </div>
       <span class="status-badge" :data-status="publishStatus">{{ statusText }}</span>
     </div>
 
     <p class="panel-copy">
-      演示环境下管理员页默认公开访问。这里发布的 `externalNullifier` 会作为一次投票活动的唯一标识。
+      请按 `external_nullifiers.json` 中的结构创建活动信息。
     </p>
 
     <form class="stack-form" @submit.prevent="handleSubmit">
       <label class="field">
-        <span>活动标识</span>
+        <span>活动编号</span>
         <input
-          v-model.trim="value"
+          v-model.trim="form.externalNullifier"
           type="text"
-          placeholder="例如：campus-budget-2026"
+          placeholder="campus-budget-2026"
+        />
+      </label>
+
+      <label class="field">
+        <span>活动名称</span>
+        <input
+          v-model.trim="form.name"
+          type="text"
+          placeholder="校园预算投票"
+        />
+      </label>
+
+      <label class="field">
+        <span>活动描述</span>
+        <textarea
+          v-model.trim="form.descrption"
+          rows="3"
+          placeholder="请填写本次投票活动的说明"
         />
       </label>
 
@@ -32,7 +50,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from "vue"
+import { computed, reactive } from "vue"
 import { STATUS } from "../constants/app"
 
 const props = defineProps({
@@ -42,7 +60,11 @@ const props = defineProps({
 
 const emit = defineEmits(["publish"])
 
-const value = ref("")
+const form = reactive({
+  externalNullifier: "",
+  name: "",
+  descrption: "",
+})
 
 const statusText = computed(() => {
   switch (props.publishStatus) {
@@ -58,10 +80,18 @@ const statusText = computed(() => {
 })
 
 function handleSubmit() {
-  const next = value.value
-  emit("publish", next)
-  if (next) {
-    value.value = ""
+  const payload = {
+    externalNullifier: form.externalNullifier,
+    name: form.name,
+    descrption: form.descrption,
+  }
+
+  emit("publish", payload)
+
+  if (payload.externalNullifier) {
+    form.externalNullifier = ""
+    form.name = ""
+    form.descrption = ""
   }
 }
 </script>

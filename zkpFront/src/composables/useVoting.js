@@ -155,12 +155,12 @@ function clearIdentity() {
   state.registerMessage = ""
 }
 
-async function publishNewActivity(externalNullifier) {
+async function publishNewActivity(activity) {
   state.publishStatus = STATUS.LOADING
   state.publishMessage = ""
 
   try {
-    const data = await publishActivity(externalNullifier)
+    const data = await publishActivity(activity)
     state.publishStatus = STATUS.SUCCESS
     state.publishMessage = "活动发布成功，用户端现在可以参与投票。"
     await refreshActivities()

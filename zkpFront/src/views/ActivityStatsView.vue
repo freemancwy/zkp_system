@@ -2,16 +2,16 @@
   <div class="page-stack">
     <section class="section-heading">
       <div>
-        <p class="eyebrow">Activity Report</p>
-        <h2>Activity Statistics</h2>
+        <p class="eyebrow">活动报告</p>
+        <h2>活动统计</h2>
       </div>
       <div class="button-row">
-        <router-link class="ghost-button" to="/vote">Back to Vote</router-link>
-        <router-link class="ghost-button" to="/admin">Back to Admin</router-link>
+        <router-link class="ghost-button" to="/vote">返回投票页</router-link>
+        <router-link class="ghost-button" to="/admin">返回管理页</router-link>
       </div>
     </section>
 
-    <div v-if="loading" class="panel empty-state">Loading activity statistics...</div>
+    <div v-if="loading" class="panel empty-state">正在加载活动统计...</div>
     <div v-else-if="errorMessage" class="panel empty-state">{{ errorMessage }}</div>
     <StatsCard v-else :stats="stats" />
   </div>
@@ -41,7 +41,7 @@ async function loadStats() {
   try {
     stats.value = await voting.fetchActivityStats(props.externalNullifier)
   } catch (error) {
-    errorMessage.value = error.message || "Failed to load statistics"
+    errorMessage.value = error.message || "加载统计信息失败"
   } finally {
     loading.value = false
   }

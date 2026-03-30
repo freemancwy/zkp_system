@@ -2,10 +2,12 @@
   <div class="page-stack">
     <section class="section-heading">
       <div>
-        <p class="eyebrow">Admin Flow</p>
-        <h2>发布投票活动并查看系统中的所有活动</h2>
+        <p class="eyebrow">管理员流程</p>
+        <h2>发布并管理投票活动</h2>
       </div>
-      <p class="section-note">演示环境，无鉴权。请仅在本地开发链或本地服务环境中使用。</p>
+      <p class="section-note">
+        当前本地演示环境默认开放管理员页面，并以活动元数据文件作为展示来源。
+      </p>
     </section>
 
     <div class="two-column admin-layout">
@@ -16,11 +18,11 @@
       />
 
       <ActivityList
-        title="活动管理"
-        eyebrow="Activity Registry"
-        description="发布后的活动会立刻出现在用户投票页，并可进入统计页面。"
+        title="活动注册表"
+        eyebrow="已发布活动"
+        description="活动发布后会立即出现在投票页面中。"
         :activities="voting.state.activities"
-        empty-text="当前还没有活动，请先发布一个。"
+        empty-text="当前还没有已发布的活动。"
       />
     </div>
   </div>
@@ -38,12 +40,12 @@ onMounted(() => {
   voting.loadDashboard().catch(() => {})
 })
 
-function handlePublish(value) {
-  if (!value) {
-    voting.setPublishError("请输入活动标识后再发布。")
+function handlePublish(activity) {
+  if (!activity?.externalNullifier) {
+    voting.setPublishError("请先输入 externalNullifier 再发布活动。")
     return
   }
 
-  voting.publishNewActivity(value).catch(() => {})
+  voting.publishNewActivity(activity).catch(() => {})
 }
 </script>

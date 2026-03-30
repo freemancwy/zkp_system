@@ -1,7 +1,7 @@
 {
   "network": "localhost",
   "chainId": null,
-  "deployedAt": "2026-03-29T06:10:10.288Z",
-  "verifier": "0x2279B7A0a67DB372996a5FaB50D91eAA73d2eBe6",
-  "voting": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318"
+  "deployedAt": "2026-03-30T01:25:20.295Z",
+  "verifier": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "voting": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"
 }

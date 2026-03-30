@@ -2,10 +2,11 @@
   <div class="page-stack">
     <section class="hero-panel">
       <div class="hero-copy">
-        <p class="eyebrow">Zero-Knowledge Voting MVP</p>
-        <h2>匿名投票、Merkle Root 与活动管理汇总在一个控制台里</h2>
+        <p class="eyebrow">零知识投票系统</p>
+        <h2>在一个控制台中完成匿名投票、Merkle Root 展示与活动管理</h2>
         <p>
-          这个前端面向双角色演示：普通用户可以准备匿名身份并参与投票，管理员可以发布活动并查看统计。
+          前端同时支持投票用户与管理员两类流程。用户可以恢复本地匿名身份并参与投票，
+          管理员可以发布带有编号、名称和描述的投票活动。
         </p>
       </div>
 
@@ -19,7 +20,7 @@
           <strong>{{ voting.state.rootInfo.depth }}</strong>
         </article>
         <article class="metric-card">
-          <span>已注册身份</span>
+          <span>已注册身份数</span>
           <strong>{{ voting.state.rootInfo.leafCount }}</strong>
         </article>
       </div>
@@ -27,23 +28,23 @@
 
     <section class="entry-grid">
       <router-link class="entry-card" to="/vote">
-        <p class="eyebrow">For Voters</p>
-        <h3>进入用户投票页</h3>
-        <p>完成手机号注册、恢复本地匿名身份、选择活动并生成证明。</p>
+        <p class="eyebrow">面向投票用户</p>
+        <h3>进入投票页</h3>
+        <p>选择活动、查看描述，并提交一次匿名投票。</p>
       </router-link>
       <router-link class="entry-card" to="/admin">
-        <p class="eyebrow">For Admin</p>
-        <h3>进入管理员页</h3>
-        <p>发布活动标识、查看已发布活动，并进入活动统计页。</p>
+        <p class="eyebrow">面向管理员</p>
+        <h3>进入管理页</h3>
+        <p>发布新的投票活动，并维护 `externalNullifier`、名称和描述信息。</p>
       </router-link>
     </section>
 
     <ActivityList
       title="已发布活动"
-      eyebrow="Active Polls"
-      description="这里展示当前系统中可以被用户投票的活动。"
+      eyebrow="活动列表"
+      description="这里展示的活动直接来自 external_nullifiers.json。"
       :activities="voting.state.activities"
-      empty-text="管理员还没有发布活动。"
+      empty-text="当前还没有已发布的活动。"
     />
   </div>
 </template>

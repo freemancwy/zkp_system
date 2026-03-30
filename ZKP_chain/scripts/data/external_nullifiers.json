@@ -2,47 +2,21 @@
   "externalNullifiers": [
     {
       "externalNullifier": "vote-2026-003",
+      "name":"test1",
+      "descrption":"test2",
       "createdAt": "2026-03-29T03:07:50.487Z"
     },
     {
       "externalNullifier": "vote-1774755046",
+      "name":"test3",
+      "descrption":"test4",
       "createdAt": "2026-03-29T03:30:46.423Z"
     },
     {
       "externalNullifier": "vote-1774755068",
+      "name":"test5",
+      "descrption":"test6",
       "createdAt": "2026-03-29T03:31:08.807Z"
-    },
-    {
-      "externalNullifier": "vote-1774755088",
-      "createdAt": "2026-03-29T03:31:28.826Z"
-    },
-    {
-      "externalNullifier": "vote-1774755088-old-proof",
-      "createdAt": "2026-03-29T03:31:29.753Z"
-    },
-    {
-      "externalNullifier": "vote-1774755121",
-      "createdAt": "2026-03-29T03:32:01.448Z"
-    },
-    {
-      "externalNullifier": "vote-1774755121-old-proof",
-      "createdAt": "2026-03-29T03:32:02.294Z"
-    },
-    {
-      "externalNullifier": "vote-chain-1774763854116",
-      "createdAt": "2026-03-29T05:57:34.183Z"
-    },
-    {
-      "externalNullifier": "vote-chain-1774763968254",
-      "createdAt": "2026-03-29T05:59:28.298Z"
-    },
-    {
-      "externalNullifier": "vote-1774764444",
-      "createdAt": "2026-03-29T06:07:24.524Z"
-    },
-    {
-      "externalNullifier": "vote-chain-1774764663668",
-      "createdAt": "2026-03-29T06:11:03.719Z"
     }
   ]
 }

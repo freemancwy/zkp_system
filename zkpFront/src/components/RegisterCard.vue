@@ -2,14 +2,14 @@
   <section class="panel">
     <div class="panel-header">
       <div>
-        <p class="eyebrow">Identity Setup</p>
+        <p class="eyebrow">身份准备</p>
         <h2>匿名身份准备</h2>
       </div>
       <span class="status-badge" :data-status="registerStatus">{{ statusText }}</span>
     </div>
 
     <p class="panel-copy">
-      使用手机号注册一次后，系统会把匿名身份保存在当前浏览器。本期演示不支持跨设备恢复。
+      使用手机号注册后，系统会将匿名身份保存到当前浏览器。本演示暂不支持跨设备恢复。
     </p>
 
     <form class="stack-form" @submit.prevent="handleRegister">

@@ -17,9 +17,13 @@
         class="activity-card"
       >
         <div>
-          <p class="activity-name">{{ activity.externalNullifier }}</p>
+          <p class="activity-name">{{ activity.name || activity.externalNullifier }}</p>
+          <p class="activity-meta">
+            <code>{{ activity.externalNullifier }}</code>
+          </p>
+          <p v-if="activity.descrption" class="panel-copy">{{ activity.descrption }}</p>
           <p v-if="showCreatedAt" class="activity-meta">
-            发布于 {{ formatDate(activity.createdAt) }}
+            发布时间：{{ formatDate(activity.createdAt) }}
           </p>
         </div>
 
@@ -49,16 +53,16 @@
 <script setup>
 defineProps({
   title: { type: String, default: "活动列表" },
-  eyebrow: { type: String, default: "Published Activities" },
+  eyebrow: { type: String, default: "已发布活动" },
   description: { type: String, default: "" },
   activities: { type: Array, default: () => [] },
-  emptyText: { type: String, default: "当前暂无已发布活动。" },
+  emptyText: { type: String, default: "当前还没有已发布的活动。" },
   showCreatedAt: { type: Boolean, default: true },
 })
 
 function formatDate(value) {
   if (!value) {
-    return "未知时间"
+    return "未知"
   }
 
   const date = new Date(value)

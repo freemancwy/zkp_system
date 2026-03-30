@@ -3,6 +3,7 @@ const cors = require("cors")
 const fs = require("fs")
 const path = require("path")
 const crypto = require("crypto")
+const hre = require("hardhat")
 const snarkjs = require("snarkjs")
 const { buildPoseidon } = require("circomlibjs")
 
@@ -20,11 +21,24 @@ const EXTERNAL_NULLIFIERS_FILE = path.join(
   DATA_DIR,
   "external_nullifiers.json"
 )
+const DEPLOYMENTS_FILE = path.join(__dirname, "..", "deployments", "localhost.json")
+const VOTING_ARTIFACT_FILE = path.join(
+  __dirname,
+  "..",
+  "hardhat-artifacts",
+  "contracts",
+  "VotingWithVerifier.sol",
+  "VotingWithVerifier.json"
+)
 const CIRCUIT_TREE_LEVELS = 20
 const MAX_LEAF_COUNT = 2 ** CIRCUIT_TREE_LEVELS
 const BN128_FIELD_SIZE = BigInt(
   "21888242871839275222246405745257275088548364400416034343698204186575808495617"
 )
+const CHAIN_RPC_URL = process.env.CHAIN_RPC_URL || "http://127.0.0.1:8545"
+const CHAIN_PRIVATE_KEY =
+  process.env.CHAIN_PRIVATE_KEY ||
+  "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
 
 function readJson(filePath, fallback) {
   if (!fs.existsSync(filePath)) {
@@ -74,6 +88,36 @@ if (!Array.isArray(ExternalNullifiersData.externalNullifiers)) {
   ExternalNullifiersData.externalNullifiers = []
 }
 
+ExternalNullifiersData.externalNullifiers = ExternalNullifiersData.externalNullifiers
+  .map((item) => {
+    if (typeof item === "string") {
+      return {
+        externalNullifier: item,
+        name: "",
+        descrption: "",
+        createdAt: new Date(0).toISOString(),
+      }
+    }
+
+    if (!item || typeof item !== "object") {
+      return null
+    }
+
+    const externalNullifier = normalizeExternalNullifier(item.externalNullifier)
+
+    if (!externalNullifier) {
+      return null
+    }
+
+    return {
+      externalNullifier,
+      name: normalizeActivityText(item.name),
+      descrption: normalizeActivityText(item.descrption ?? item.description),
+      createdAt: item.createdAt ?? new Date(0).toISOString(),
+    }
+  })
+  .filter(Boolean)
+
 const LEAVES = []
 
 let poseidon
@@ -121,6 +165,14 @@ function normalizeExternalNullifier(externalNullifier) {
 
   const normalized = externalNullifier.trim()
   return normalized || null
+}
+
+function normalizeActivityText(value) {
+  if (typeof value !== "string") {
+    return ""
+  }
+
+  return value.trim()
 }
 
 function normalizeVote(vote) {
@@ -258,9 +310,91 @@ function findVoteRecordByNullifierHash(nullifierHash) {
   )
 }
 
+function readDeployment() {
+  if (!fs.existsSync(DEPLOYMENTS_FILE)) {
+    throw new Error(
+      `Missing deployment file: ${DEPLOYMENTS_FILE}. Run \`npm run hardhat:deploy\` first.`
+    )
+  }
+
+  const deployment = readJson(DEPLOYMENTS_FILE, {})
+
+  if (!deployment.voting) {
+    throw new Error(
+      `Voting contract address is missing in ${DEPLOYMENTS_FILE}. Redeploy the contracts first.`
+    )
+  }
+
+  return deployment
+}
+
+function readVotingArtifact() {
+  if (!fs.existsSync(VOTING_ARTIFACT_FILE)) {
+    throw new Error(
+      `Missing contract artifact: ${VOTING_ARTIFACT_FILE}. Run \`npm run hardhat:compile\` first.`
+    )
+  }
+
+  const artifact = readJson(VOTING_ARTIFACT_FILE, {})
+
+  if (!Array.isArray(artifact.abi)) {
+    throw new Error(`Invalid contract artifact: ${VOTING_ARTIFACT_FILE}`)
+  }
+
+  return artifact
+}
+
+function toContractArgs(proof, publicSignals) {
+  return {
+    pA: [String(proof.pi_a[0]), String(proof.pi_a[1])],
+    pB: [
+      [String(proof.pi_b[0][1]), String(proof.pi_b[0][0])],
+      [String(proof.pi_b[1][1]), String(proof.pi_b[1][0])],
+    ],
+    pC: [String(proof.pi_c[0]), String(proof.pi_c[1])],
+    pubSignals: [String(publicSignals[0]), String(publicSignals[1])],
+  }
+}
+
+async function submitVoteOnChain(proof, publicSignals) {
+  const deployment = readDeployment()
+  const artifact = readVotingArtifact()
+  const provider = new hre.ethers.JsonRpcProvider(CHAIN_RPC_URL)
+  const wallet = new hre.ethers.Wallet(CHAIN_PRIVATE_KEY, provider)
+  const voting = new hre.ethers.Contract(
+    deployment.voting,
+    artifact.abi,
+    wallet
+  )
+  const contractArgs = toContractArgs(proof, publicSignals)
+
+  const tx = await voting.submitVote(
+    contractArgs.pA,
+    contractArgs.pB,
+    contractArgs.pC,
+    contractArgs.pubSignals
+  )
+  const receipt = await tx.wait()
+
+  return {
+    txHash: receipt.hash,
+    blockNumber: receipt.blockNumber,
+    contractAddress: deployment.voting,
+    network: deployment.network ?? "localhost",
+  }
+}
+
 function hasPublishedExternalNullifier(externalNullifier) {
   return ExternalNullifiersData.externalNullifiers.some(
     (item) => item.externalNullifier === externalNullifier
+  )
+}
+
+function findPublishedActivity(externalNullifier) {
+  return (
+    ExternalNullifiersData.externalNullifiers.find(
+      (item) => item.externalNullifier === externalNullifier
+    ) ?? null
   )
 }
 
@@ -351,6 +485,8 @@ app.post("/api/external-nullifier/publish", (req, res) => {
   const externalNullifier = normalizeExternalNullifier(
     req.body.externalNullifier
   )
+  const name = normalizeActivityText(req.body.name)
+  const descrption = normalizeActivityText(req.body.descrption)
 
   if (!externalNullifier) {
     return res.status(400).json({
@@ -369,6 +505,8 @@ app.post("/api/external-nullifier/publish", (req, res) => {
 
   ExternalNullifiersData.externalNullifiers.push({
     externalNullifier,
+    name,
+    descrption,
     createdAt: new Date().toISOString(),
   })
   saveExternalNullifiers()
@@ -377,6 +515,8 @@ app.post("/api/external-nullifier/publish", (req, res) => {
     success: true,
     message: "externalNullifier发布成功",
     externalNullifier,
+    name,
+    descrption,
   })
 })
 
@@ -600,12 +740,26 @@ app.post("/api/vote", async (req, res) => {
       })
     }
 
+    let chainReceipt
+
+    try {
+      chainReceipt = await submitVoteOnChain(proof, publicSignals)
+    } catch (error) {
+      return res.status(503).json({
+        success: false,
+        error: `链上提交失败: ${error.message}`,
+        nullifierHash,
+        signalHash,
+      })
+    }
+
     const voteRecord = {
       externalNullifier,
       vote,
       nullifierHash,
       signalHash,
       createdAt: new Date().toISOString(),
+      onChain: chainReceipt,
     }
 
     VotesData.votes.push(voteRecord)
@@ -619,6 +773,7 @@ app.post("/api/vote", async (req, res) => {
       externalNullifierField: normalizedInput.externalNullifier,
       nullifierHash,
       signalHash,
+      onChain: chainReceipt,
       voteRecord,
     })
   } catch (error) {
@@ -645,10 +800,14 @@ app.get("/api/activity-stats/:externalNullifier", (req, res) => {
   const activityVotes = VotesData.votes.filter(
     (item) => item.externalNullifier === externalNullifier
   )
+  const activity = findPublishedActivity(externalNullifier)
 
   res.json({
     success: true,
     externalNullifier,
+    name: activity?.name ?? "",
+    descrption: activity?.descrption ?? "",
+    createdAt: activity?.createdAt ?? null,
     totalVoters: activityVotes.length,
     voteCounts: {
       support: activityVotes.filter((item) => item.vote === "1").length,

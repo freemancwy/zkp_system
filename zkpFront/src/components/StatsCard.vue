@@ -2,19 +2,24 @@
   <section class="panel">
     <div class="panel-header">
       <div>
-        <p class="eyebrow">Activity Statistics</p>
-        <h2>{{ stats.externalNullifier || "活动统计" }}</h2>
+        <p class="eyebrow">活动统计</p>
+        <h2>{{ stats.name || stats.externalNullifier || "活动统计" }}</h2>
       </div>
       <span class="metric-chip">{{ stats.totalVoters ?? 0 }} 人参与</span>
     </div>
 
+    <p v-if="stats.externalNullifier" class="activity-meta">
+      <code>{{ stats.externalNullifier }}</code>
+    </p>
+    <p v-if="stats.descrption" class="panel-copy">{{ stats.descrption }}</p>
+
     <div class="stats-grid">
       <article class="stat-box">
-        <span>总投票人数</span>
+        <span>总投票数</span>
         <strong>{{ stats.totalVoters ?? 0 }}</strong>
       </article>
       <article class="stat-box support">
-        <span>支持票</span>
+        <span>赞成票</span>
         <strong>{{ stats.voteCounts?.support ?? 0 }}</strong>
       </article>
       <article class="stat-box against">
@@ -32,13 +37,13 @@
           class="record-item"
         >
           <div>
-            <p>{{ voter.vote === "1" ? "支持" : "反对" }}</p>
+            <p>{{ voter.vote === "1" ? "赞成" : "反对" }}</p>
             <span>{{ formatDate(voter.votedAt) }}</span>
           </div>
           <code>{{ shorten(voter.nullifierHash) }}</code>
         </article>
       </div>
-      <div v-else class="empty-state">该活动还没有投票记录。</div>
+      <div v-else class="empty-state">该活动暂时还没有投票记录。</div>
     </div>
   </section>
 </template>
@@ -49,6 +54,8 @@ defineProps({
     type: Object,
     default: () => ({
       externalNullifier: "",
+      name: "",
+      descrption: "",
       totalVoters: 0,
       voteCounts: {
         support: 0,
@@ -61,7 +68,7 @@ defineProps({
 
 function formatDate(value) {
   if (!value) {
-    return "未知时间"
+      return "未知"
   }
 
   const date = new Date(value)
