@@ -46,6 +46,8 @@ template SemaphoreVote(nLevels) {
     signal input identityTrapdoor;
     signal input treePathElements[nLevels];
     signal input treePathIndices[nLevels];
+    // 让投票选择在链上不可被预先计算/解码的随机盐（私有输入）
+    signal input voteSalt;
 
     // 公共输入
     signal input root;
@@ -83,9 +85,11 @@ template SemaphoreVote(nLevels) {
     voteCheck.in[1] <== 2;
     voteCheck.out === 1;
 
-    // 5. 投票哈希（强约束，不可伪造）
-    component voteHasher = Poseidon(1);
+    // 5. 投票承诺（用于链上公开的 signalHash）
+    // 使用随机盐，避免任何观察者通过 Poseidon(0/1) 直接反推出 vote。
+    component voteHasher = Poseidon(2);
     voteHasher.inputs[0] <== vote;
+    voteHasher.inputs[1] <== voteSalt;
     voteHash <== voteHasher.out;
 }
 

@@ -9,26 +9,18 @@
     </div>
 
     <p class="panel-copy">
-      请按 `external_nullifiers.json` 中的结构创建活动信息。
+      请按 `external_nullifiers.json` 的结构完善活动信息，包括编号、名称、描述、时间窗口、人数上限和创建者。
     </p>
 
     <form class="stack-form" @submit.prevent="handleSubmit">
       <label class="field">
         <span>活动编号</span>
-        <input
-          v-model.trim="form.externalNullifier"
-          type="text"
-          placeholder="campus-budget-2026"
-        />
+        <input v-model.trim="form.externalNullifier" type="text" placeholder="campus-budget-2026" />
       </label>
 
       <label class="field">
         <span>活动名称</span>
-        <input
-          v-model.trim="form.name"
-          type="text"
-          placeholder="校园预算投票"
-        />
+        <input v-model.trim="form.name" type="text" placeholder="校园预算投票" />
       </label>
 
       <label class="field">
@@ -38,6 +30,26 @@
           rows="3"
           placeholder="请填写本次投票活动的说明"
         />
+      </label>
+
+      <label class="field">
+        <span>开始时间</span>
+        <input v-model="form.startAt" type="datetime-local" />
+      </label>
+
+      <label class="field">
+        <span>结束时间</span>
+        <input v-model="form.endAt" type="datetime-local" />
+      </label>
+
+      <label class="field">
+        <span>人数上限</span>
+        <input v-model.trim="form.maxVoters" type="number" min="1" placeholder="例如：100" />
+      </label>
+
+      <label class="field">
+        <span>创建者/管理员</span>
+        <input v-model.trim="form.createdBy" type="text" placeholder="例如：系统管理员" />
       </label>
 
       <button class="primary-button" type="submit" :disabled="publishStatus === STATUS.LOADING">
@@ -64,6 +76,10 @@ const form = reactive({
   externalNullifier: "",
   name: "",
   descrption: "",
+  startAt: "",
+  endAt: "",
+  maxVoters: "",
+  createdBy: "",
 })
 
 const statusText = computed(() => {
@@ -79,19 +95,29 @@ const statusText = computed(() => {
   }
 })
 
+function toIsoLike(value) {
+  return value ? new Date(value).toISOString() : null
+}
+
 function handleSubmit() {
-  const payload = {
+  emit("publish", {
     externalNullifier: form.externalNullifier,
     name: form.name,
     descrption: form.descrption,
-  }
+    startAt: toIsoLike(form.startAt),
+    endAt: toIsoLike(form.endAt),
+    maxVoters: form.maxVoters,
+    createdBy: form.createdBy,
+  })
 
-  emit("publish", payload)
-
-  if (payload.externalNullifier) {
+  if (form.externalNullifier) {
     form.externalNullifier = ""
     form.name = ""
     form.descrption = ""
+    form.startAt = ""
+    form.endAt = ""
+    form.maxVoters = ""
+    form.createdBy = ""
   }
 }
 </script>

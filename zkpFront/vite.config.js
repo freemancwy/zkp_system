@@ -1,7 +1,20 @@
-import { defineConfig } from 'vite'
-import vue from '@vitejs/plugin-vue'
+import path from "node:path"
+import { defineConfig } from "vite"
+import vue from "@vitejs/plugin-vue"
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue()]
+  plugins: [vue()],
+  resolve: {
+    alias: {
+      ethers: path.resolve(
+        __dirname,
+        "../ZKP_chain/node_modules/ethers/lib.esm/index.js"
+      ),
+    },
+  },
+  server: {
+    fs: {
+      allow: [path.resolve(__dirname, "..")],
+    },
+  },
 })

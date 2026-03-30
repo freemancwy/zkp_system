@@ -69,6 +69,36 @@
       "nullifierHash": "11419161726548503116572809009243310658222078155597281105731923131829185762618",
       "signalHash": "18586133768512220936620570745912940619677854269274689475585506675881198879027",
       "createdAt": "2026-03-29T06:11:04.444Z"
+    },
+    {
+      "externalNullifier": "vote-chain-1774850615192",
+      "vote": "1",
+      "nullifierHash": "11520633417152864081343773108762480239563285265769857308827939968754578642927",
+      "signalHash": "13602472224157458317247973306252243512360521392890881066339500707400983301086",
+      "createdAt": "2026-03-30T06:03:36.248Z",
+      "onChain": {
+        "txHash": "0x8acc9c95c213edb9a4171e49a17a51df6231421002453d7ccaa8ae64659cb60f",
+        "txUrl": null,
+        "blockNumber": 5,
+        "contractAddress": "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9",
+        "network": "localhost",
+        "durationMs": 250
+      }
+    },
+    {
+      "externalNullifier": "campus_budget-211",
+      "vote": "1",
+      "nullifierHash": "2078946056163282383385755843858236270345107848469160198684086580054619710613",
+      "signalHash": "11103105903794581950642507306173748312203492084663211163154440202809128794529",
+      "createdAt": "2026-03-30T06:14:35.544Z",
+      "onChain": {
+        "txHash": "0x7731cb5e1201a003e9f49b6785b6fb415bfaf4ecaf44e2e45492bf9c7930fa7f",
+        "txUrl": null,
+        "blockNumber": 3,
+        "contractAddress": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+        "network": "localhost",
+        "durationMs": 165
+      }
     }
   ]
 }

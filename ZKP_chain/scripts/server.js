@@ -36,6 +36,9 @@ const BN128_FIELD_SIZE = BigInt(
   "21888242871839275222246405745257275088548364400416034343698204186575808495617"
 )
 const CHAIN_RPC_URL = process.env.CHAIN_RPC_URL || "http://127.0.0.1:8545"
+const CHAIN_EXPLORER_BASE_URL = (
+  process.env.CHAIN_EXPLORER_BASE_URL || ""
+).replace(/\/+$/, "")
 const CHAIN_PRIVATE_KEY =
   process.env.CHAIN_PRIVATE_KEY ||
   "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
@@ -95,6 +98,10 @@ ExternalNullifiersData.externalNullifiers = ExternalNullifiersData.externalNulli
         externalNullifier: item,
         name: "",
         descrption: "",
+        startAt: null,
+        endAt: null,
+        maxVoters: null,
+        createdBy: "",
         createdAt: new Date(0).toISOString(),
       }
     }
@@ -113,6 +120,10 @@ ExternalNullifiersData.externalNullifiers = ExternalNullifiersData.externalNulli
       externalNullifier,
       name: normalizeActivityText(item.name),
       descrption: normalizeActivityText(item.descrption ?? item.description),
+      startAt: normalizeActivityDate(item.startAt),
+      endAt: normalizeActivityDate(item.endAt),
+      maxVoters: normalizePositiveInteger(item.maxVoters),
+      createdBy: normalizeActivityText(item.createdBy),
       createdAt: item.createdAt ?? new Date(0).toISOString(),
     }
   })
@@ -173,6 +184,32 @@ function normalizeActivityText(value) {
   }
 
   return value.trim()
+}
+
+function normalizeActivityDate(value) {
+  if (!value) {
+    return null
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+
+  return date.toISOString()
+}
+
+function normalizePositiveInteger(value) {
+  if (value === undefined || value === null || value === "") {
+    return null
+  }
+
+  const parsed = Number.parseInt(String(value), 10)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return null
+  }
+
+  return parsed
 }
 
 function normalizeVote(vote) {
@@ -378,6 +415,7 @@ async function submitVoteOnChain(proof, publicSignals) {
 
   return {
     txHash: receipt.hash,
+    txUrl: buildTransactionUrl(receipt.hash),
     blockNumber: receipt.blockNumber,
     contractAddress: deployment.voting,
     network: deployment.network ?? "localhost",
@@ -396,6 +434,71 @@ function findPublishedActivity(externalNullifier) {
       (item) => item.externalNullifier === externalNullifier
     ) ?? null
   )
+}
+
+function deriveActivityStatus(activity, now = new Date()) {
+  if (!activity) {
+    return "unknown"
+  }
+
+  const nowMs = now.getTime()
+  const startMs = activity.startAt ? Date.parse(activity.startAt) : null
+  const endMs = activity.endAt ? Date.parse(activity.endAt) : null
+
+  if (startMs && nowMs < startMs) {
+    return "upcoming"
+  }
+
+  if (endMs && nowMs > endMs) {
+    return "closed"
+  }
+
+  return "active"
+}
+
+function enrichActivity(activity) {
+  if (!activity) {
+    return null
+  }
+
+  const votes = VotesData.votes.filter(
+    (item) => item.externalNullifier === activity.externalNullifier
+  )
+
+  return {
+    ...activity,
+    status: deriveActivityStatus(activity),
+    currentVoters: votes.length,
+    remainingVoters:
+      activity.maxVoters == null ? null : Math.max(activity.maxVoters - votes.length, 0),
+  }
+}
+
+function buildTransactionUrl(txHash) {
+  if (!txHash || !CHAIN_EXPLORER_BASE_URL) {
+    return null
+  }
+
+  return `${CHAIN_EXPLORER_BASE_URL}/tx/${txHash}`
+}
+
+async function getChainSnapshot() {
+  const deployment = readDeployment()
+  const artifact = readVotingArtifact()
+  const provider = new hre.ethers.JsonRpcProvider(CHAIN_RPC_URL)
+  const voting = new hre.ethers.Contract(deployment.voting, artifact.abi, provider)
+  const totalVotes = await voting.totalVotes()
+
+  return {
+    network: deployment.network ?? "localhost",
+    chainId: deployment.chainId,
+    contractAddress: deployment.voting,
+    verifierAddress: deployment.verifier ?? null,
+    deployedAt: deployment.deployedAt ?? null,
+    totalVotes: totalVotes.toString(),
+    rpcUrl: CHAIN_RPC_URL,
+    explorerBaseUrl: CHAIN_EXPLORER_BASE_URL || null,
+  }
 }
 
 async function rebuildMerkleTree() {
@@ -478,7 +581,24 @@ app.get("/api/root", (req, res) => {
     root: TreeMeta.root,
     depth: TreeMeta.depth,
     leafCount: TreeMeta.leafCount,
+    generatedAt: new Date().toISOString(),
   })
+})
+
+app.get("/api/chain-status", async (req, res) => {
+  try {
+    const chain = await getChainSnapshot()
+
+    res.json({
+      success: true,
+      chain,
+    })
+  } catch (error) {
+    res.status(503).json({
+      success: false,
+      error: `鑾峰彇閾句笂鐘舵€佸け璐? ${error.message}`,
+    })
+  }
 })
 
 app.post("/api/external-nullifier/publish", (req, res) => {
@@ -487,36 +607,53 @@ app.post("/api/external-nullifier/publish", (req, res) => {
   )
   const name = normalizeActivityText(req.body.name)
   const descrption = normalizeActivityText(req.body.descrption)
+  const startAt = normalizeActivityDate(req.body.startAt)
+  const endAt = normalizeActivityDate(req.body.endAt)
+  const maxVoters = normalizePositiveInteger(req.body.maxVoters)
+  const createdBy = normalizeActivityText(req.body.createdBy)
 
   if (!externalNullifier) {
     return res.status(400).json({
       success: false,
-      error: "缺少活动标识",
+      error: "缂哄皯娲诲姩鏍囪瘑",
     })
   }
 
   if (hasPublishedExternalNullifier(externalNullifier)) {
     return res.status(409).json({
       success: false,
-      error: "活动标识已发布",
+      error: "???????",
       externalNullifier,
     })
   }
 
-  ExternalNullifiersData.externalNullifiers.push({
+  if (startAt && endAt && Date.parse(startAt) >= Date.parse(endAt)) {
+    return res.status(400).json({
+      success: false,
+      error: "??????????????",
+    })
+  }
+
+  const activity = {
     externalNullifier,
     name,
     descrption,
+    startAt,
+    endAt,
+    maxVoters,
+    createdBy,
     createdAt: new Date().toISOString(),
-  })
+  }
+  ExternalNullifiersData.externalNullifiers.push(activity)
   saveExternalNullifiers()
 
   res.json({
     success: true,
-    message: "externalNullifier发布成功",
+    message: "externalNullifier鍙戝竷鎴愬姛",
     externalNullifier,
     name,
     descrption,
+    activity: enrichActivity(activity),
   })
 })
 
@@ -524,7 +661,7 @@ app.get("/api/external-nullifiers", (req, res) => {
   res.json({
     success: true,
     total: ExternalNullifiersData.externalNullifiers.length,
-    externalNullifiers: ExternalNullifiersData.externalNullifiers,
+    externalNullifiers: ExternalNullifiersData.externalNullifiers.map(enrichActivity),
   })
 })
 
@@ -535,14 +672,14 @@ app.post("/api/register", async (req, res) => {
     if (!phone) {
       return res.status(400).json({
         success: false,
-        error: "无效手机号",
+        error: "?????",
       })
     }
 
     if (LEAVES.length >= MAX_LEAF_COUNT) {
       return res.status(400).json({
         success: false,
-        error: `存储树已满(最大 ${MAX_LEAF_COUNT} 节点)`,
+        error: `瀛樺偍鏍戝凡婊?鏈€澶?${MAX_LEAF_COUNT} 鑺傜偣)`,
       })
     }
 
@@ -550,7 +687,7 @@ app.post("/api/register", async (req, res) => {
     if (existingUser) {
       return res.status(409).json({
         success: false,
-        error: "用户已经注册",
+        error: "鐢ㄦ埛宸茬粡娉ㄥ唽",
         phone,
         commitment: existingUser.commitment,
       })
@@ -579,7 +716,7 @@ app.post("/api/register", async (req, res) => {
 
     res.json({
       success: true,
-      message: "注册成功",
+      message: "娉ㄥ唽鎴愬姛",
       phone,
       identityNullifier: user.identityNullifier,
       identityTrapdoor: user.identityTrapdoor,
@@ -588,7 +725,7 @@ app.post("/api/register", async (req, res) => {
       leafCount: TreeMeta.leafCount,
     })
   } catch (error) {
-    console.error("注册失败", error)
+    console.error("娉ㄥ唽澶辫触", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -603,7 +740,7 @@ app.post("/api/merkle-proof", async (req, res) => {
     if (!phone) {
       return res.status(400).json({
         success: false,
-        error: "缺少手机号",
+        error: "?????",
       })
     }
 
@@ -611,7 +748,7 @@ app.post("/api/merkle-proof", async (req, res) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        error: "用户未注册",
+        error: "?????",
       })
     }
 
@@ -621,7 +758,7 @@ app.post("/api/merkle-proof", async (req, res) => {
     if (index === -1) {
       return res.status(404).json({
         success: false,
-        error: "用户不在默克尔树中",
+        error: "???? Merkle ??",
       })
     }
 
@@ -637,7 +774,7 @@ app.post("/api/merkle-proof", async (req, res) => {
       ...proof,
     })
   } catch (error) {
-    console.error("proof生成失败", error)
+    console.error("proof鐢熸垚澶辫触", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -648,6 +785,7 @@ app.post("/api/merkle-proof", async (req, res) => {
 app.post("/api/vote", async (req, res) => {
   try {
     const input = req.body
+    const submitMode = input.submitMode === "client" ? "client" : "server"
     const externalNullifier = normalizeExternalNullifier(
       input.externalNullifier
     )
@@ -667,7 +805,7 @@ app.post("/api/vote", async (req, res) => {
       if (input[key] === undefined) {
         return res.status(400).json({
           success: false,
-          error: `缺少必要参数: ${key}`,
+          error: `缂哄皯蹇呰鍙傛暟: ${key}`,
         })
       }
     }
@@ -675,37 +813,67 @@ app.post("/api/vote", async (req, res) => {
     if (!externalNullifier) {
       return res.status(400).json({
         success: false,
-        error: "无效的活动标识",
+        error: "???????",
       })
     }
 
     if (!hasPublishedExternalNullifier(externalNullifier)) {
       return res.status(400).json({
         success: false,
-        error: "活动未发布",
+        error: "?????",
       })
     }
 
     if (!vote) {
       return res.status(400).json({
         success: false,
-        error: "vote不合法",
+        error: "???????",
       })
     }
 
     if (input.treePathElements.length !== CIRCUIT_TREE_LEVELS) {
       return res.status(400).json({
         success: false,
-        error: `pathElements长度不等于${TreeMeta.depth}`,
+        error: `pathElements闀垮害涓嶇瓑浜?{TreeMeta.depth}`,
       })
     }
 
     if (input.treePathIndices.length !== CIRCUIT_TREE_LEVELS) {
       return res.status(400).json({
         success: false,
-        error: `pathIndices长度不等于${TreeMeta.depth}`,
+        error: `pathIndices闀垮害涓嶇瓑浜?{TreeMeta.depth}`,
       })
     }
+
+    const activity = findPublishedActivity(externalNullifier)
+    const activityStatus = deriveActivityStatus(activity)
+    const activityVotes = VotesData.votes.filter(
+      (item) => item.externalNullifier === externalNullifier
+    )
+
+    if (activityStatus === "upcoming") {
+      return res.status(400).json({
+        success: false,
+        error: "??????",
+      })
+    }
+
+    if (activityStatus === "closed") {
+      return res.status(400).json({
+        success: false,
+        error: "?????",
+      })
+    }
+
+    if (activity?.maxVoters != null && activityVotes.length >= activity.maxVoters) {
+      return res.status(400).json({
+        success: false,
+        error: "娲诲姩鍙備笌浜烘暟宸茶揪涓婇檺",
+      })
+    }
+
+    // 使用随机盐，避免链上可见的 signalHash 从投票值直接反推
+    const voteSalt = randomFieldElement()
 
     const normalizedInput = {
       identityNullifier: String(input.identityNullifier),
@@ -715,16 +883,19 @@ app.post("/api/vote", async (req, res) => {
       root: String(input.root),
       externalNullifier: externalNullifierToField(externalNullifier),
       vote,
+      voteSalt: voteSalt.toString(),
     }
 
     const wasmPath = path.join(__dirname, "../build/circuit_js/circuit.wasm")
     const zkeyPath = path.join(__dirname, "../zkey/circuit_final.zkey")
 
+    const proofStartedAt = Date.now()
     const { proof, publicSignals } = await snarkjs.groth16.fullProve(
       normalizedInput,
       wasmPath,
       zkeyPath
     )
+    const proofDurationMs = Date.now() - proofStartedAt
 
     const nullifierHash = publicSignals[0]
     const signalHash = publicSignals[1]
@@ -734,20 +905,42 @@ app.post("/api/vote", async (req, res) => {
     if (existingVote) {
       return res.status(409).json({
         success: false,
-        error: "活动重复投票",
+        error: "娲诲姩閲嶅鎶曠エ",
         externalNullifier,
         nullifierHash,
+      })
+    }
+
+    if (submitMode === "client") {
+      return res.json({
+        success: true,
+        proof,
+        publicSignals,
+        contractArgs: toContractArgs(proof, publicSignals),
+        merkleRoot: normalizedInput.root,
+        externalNullifierField: normalizedInput.externalNullifier,
+        nullifierHash,
+        signalHash,
+        voteRecord: {
+          externalNullifier,
+          vote,
+        },
+        metrics: {
+          proofDurationMs,
+        },
       })
     }
 
     let chainReceipt
 
     try {
+      const chainStartedAt = Date.now()
       chainReceipt = await submitVoteOnChain(proof, publicSignals)
+      chainReceipt.durationMs = Date.now() - chainStartedAt
     } catch (error) {
       return res.status(503).json({
         success: false,
-        error: `链上提交失败: ${error.message}`,
+        error: `閾句笂鎻愪氦澶辫触: ${error.message}`,
         nullifierHash,
         signalHash,
       })
@@ -773,11 +966,15 @@ app.post("/api/vote", async (req, res) => {
       externalNullifierField: normalizedInput.externalNullifier,
       nullifierHash,
       signalHash,
+      metrics: {
+        proofDurationMs,
+        chainDurationMs: chainReceipt.durationMs,
+      },
       onChain: chainReceipt,
       voteRecord,
     })
   } catch (error) {
-    console.error("投票失败", error)
+    console.error("鎶曠エ澶辫触", error)
     res.status(500).json({
       success: false,
       error: error.message,
@@ -793,14 +990,43 @@ app.get("/api/activity-stats/:externalNullifier", (req, res) => {
   if (!externalNullifier) {
     return res.status(400).json({
       success: false,
-      error: "无效id",
+      error: "鏃犳晥id",
     })
   }
 
-  const activityVotes = VotesData.votes.filter(
-    (item) => item.externalNullifier === externalNullifier
-  )
   const activity = findPublishedActivity(externalNullifier)
+  const voteFilterRaw = String(req.query.vote ?? "all")
+  const voteFilter = voteFilterRaw === "all" ? null : normalizeVote(voteFilterRaw)
+  const page = Math.max(1, Number.parseInt(String(req.query.page ?? "1"), 10) || 1)
+  const pageSize = Math.min(
+    50,
+    Math.max(1, Number.parseInt(String(req.query.pageSize ?? "10"), 10) || 10)
+  )
+
+  if (!activity) {
+    return res.status(404).json({
+      success: false,
+      error: "?????",
+    })
+  }
+
+  if (voteFilterRaw !== "all" && !voteFilter) {
+    return res.status(400).json({
+      success: false,
+      error: "?????????",
+    })
+  }
+
+  const activityVotes = VotesData.votes
+    .filter((item) => item.externalNullifier === externalNullifier)
+    .sort((a, b) => Date.parse(b.createdAt ?? 0) - Date.parse(a.createdAt ?? 0))
+  const filteredVotes = voteFilter
+    ? activityVotes.filter((item) => item.vote === voteFilter)
+    : activityVotes
+  const totalPages = Math.max(1, Math.ceil(filteredVotes.length / pageSize))
+  const safePage = Math.min(page, totalPages)
+  const startIndex = (safePage - 1) * pageSize
+  const pagedVotes = filteredVotes.slice(startIndex, startIndex + pageSize)
 
   res.json({
     success: true,
@@ -808,16 +1034,77 @@ app.get("/api/activity-stats/:externalNullifier", (req, res) => {
     name: activity?.name ?? "",
     descrption: activity?.descrption ?? "",
     createdAt: activity?.createdAt ?? null,
+    startAt: activity?.startAt ?? null,
+    endAt: activity?.endAt ?? null,
+    maxVoters: activity?.maxVoters ?? null,
+    createdBy: activity?.createdBy ?? "",
+    status: deriveActivityStatus(activity),
     totalVoters: activityVotes.length,
     voteCounts: {
       support: activityVotes.filter((item) => item.vote === "1").length,
       against: activityVotes.filter((item) => item.vote === "0").length,
     },
-    voters: activityVotes.map((item) => ({
+    pagination: {
+      page: safePage,
+      pageSize,
+      total: filteredVotes.length,
+      totalPages,
+      hasPrev: safePage > 1,
+      hasNext: safePage < totalPages,
+    },
+    filters: {
+      vote: voteFilterRaw,
+    },
+    voters: pagedVotes.map((item) => ({
       vote: item.vote,
       votedAt: item.createdAt,
       nullifierHash: item.nullifierHash,
+      txHash: item.onChain?.txHash ?? null,
+      blockNumber: item.onChain?.blockNumber ?? null,
+      txUrl: buildTransactionUrl(item.onChain?.txHash),
     })),
+  })
+})
+
+app.post("/api/vote-record", (req, res) => {
+  const externalNullifier = normalizeExternalNullifier(req.body.externalNullifier)
+  const vote = normalizeVote(req.body.vote)
+  const nullifierHash = String(req.body.nullifierHash ?? "")
+  const signalHash = String(req.body.signalHash ?? "")
+
+  if (!externalNullifier || !vote || !nullifierHash || !signalHash) {
+    return res.status(400).json({
+      success: false,
+      error: "缂哄皯鎶曠エ璁板綍鍙傛暟",
+    })
+  }
+
+  const existingVote = findVoteRecordByNullifierHash(nullifierHash)
+  if (existingVote) {
+    return res.status(409).json({
+      success: false,
+      error: "?????????",
+      voteRecord: existingVote,
+    })
+  }
+
+  const voteRecord = {
+    externalNullifier,
+    vote,
+    nullifierHash,
+    signalHash,
+    createdAt: new Date().toISOString(),
+    onChain: req.body.onChain ?? null,
+    metrics: req.body.metrics ?? null,
+  }
+
+  VotesData.votes.push(voteRecord)
+  saveVotes()
+
+  res.json({
+    success: true,
+    message: "閾句笂鎶曠エ璁板綍鍚屾鎴愬姛",
+    voteRecord,
   })
 })
 
@@ -832,7 +1119,7 @@ const PORT = 3000
       console.log(`Server running at http://localhost:${PORT}`)
     })
   } catch (error) {
-    console.error("Server启动失败", error)
+    console.error("Server鍚姩澶辫触", error)
     process.exit(1)
   }
 })()

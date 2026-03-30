@@ -103,6 +103,8 @@ async function generateVoteProof(identityNullifier, identityTrapdoor, proofData)
       root: proofData.root,
       externalNullifier: ACTIVITY,
       vote: VOTE,
+      // 让后端只生成 proof，不在 /api/vote 中代发链上交易。
+      submitMode: "client",
     }),
   })
 

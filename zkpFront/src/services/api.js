@@ -29,6 +29,10 @@ export function getActivities() {
   return request("/api/external-nullifiers")
 }
 
+export function getChainStatus() {
+  return request("/api/chain-status")
+}
+
 export function publishActivity(payload) {
   return request("/api/external-nullifier/publish", {
     method: "POST",
@@ -57,8 +61,41 @@ export function submitVote(payload) {
   })
 }
 
-export function getActivityStats(externalNullifier) {
-  return request(
-    `/api/activity-stats/${encodeURIComponent(externalNullifier)}`
-  )
+export function prepareVote(payload) {
+  return request("/api/vote", {
+    method: "POST",
+    body: JSON.stringify({ ...payload, submitMode: "client" }),
+  })
+}
+
+export function recordVote(payload) {
+  return request("/api/vote-record", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function getActivityStats(externalNullifier, options = {}) {
+  const params = new URLSearchParams()
+
+  if (options.vote && options.vote !== "all") {
+    params.set("vote", options.vote)
+  } else if (options.vote === "all") {
+    params.set("vote", "all")
+  }
+
+  if (options.page) {
+    params.set("page", String(options.page))
+  }
+
+  if (options.pageSize) {
+    params.set("pageSize", String(options.pageSize))
+  }
+
+  const query = params.toString()
+  const path = `/api/activity-stats/${encodeURIComponent(externalNullifier)}${
+    query ? `?${query}` : ""
+  }`
+
+  return request(path)
 }

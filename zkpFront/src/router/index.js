@@ -3,6 +3,7 @@ import HomeView from "../views/HomeView.vue"
 import VoteView from "../views/VoteView.vue"
 import AdminView from "../views/AdminView.vue"
 import ActivityStatsView from "../views/ActivityStatsView.vue"
+import ContractStatusView from "../views/ContractStatusView.vue"
 
 const router = createRouter({
   history: createWebHistory(),
@@ -15,6 +16,7 @@ const router = createRouter({
       component: ActivityStatsView,
       props: true,
     },
+    { path: "/contract", component: ContractStatusView },
   ],
 })
 

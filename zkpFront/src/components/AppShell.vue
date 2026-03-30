@@ -9,16 +9,19 @@
         </div>
       </router-link>
 
-      <nav class="topnav" aria-label="主导航">
-        <router-link
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          class="nav-link"
-        >
-          {{ item.label }}
-        </router-link>
-      </nav>
+      <div class="topnav-wrap">
+        <nav class="topnav" aria-label="主导航">
+          <router-link
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="nav-link"
+          >
+            {{ item.label }}
+          </router-link>
+        </nav>
+        <WalletStatusBadge />
+      </div>
     </header>
 
     <main class="page-body">
@@ -28,7 +31,15 @@
 </template>
 
 <script setup>
+import { onMounted } from "vue"
 import { NAV_ITEMS } from "../constants/app"
+import WalletStatusBadge from "./WalletStatusBadge.vue"
+import { useWallet } from "../composables/useWallet"
 
 const navItems = NAV_ITEMS
+const { readWalletState } = useWallet()
+
+onMounted(() => {
+  readWalletState().catch(() => {})
+})
 </script>

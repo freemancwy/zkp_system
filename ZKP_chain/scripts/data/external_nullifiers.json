@@ -2,21 +2,83 @@
   "externalNullifiers": [
     {
       "externalNullifier": "vote-2026-003",
-      "name":"test1",
-      "descrption":"test2",
+      "name": "校园预算投票",
+      "descrption": "用于演示校园预算分配方案的匿名投票流程。",
+      "startAt": "2026-03-30T08:00:00.000Z",
+      "endAt": "2026-04-10T08:00:00.000Z",
+      "maxVoters": 100,
+      "createdBy": "系统管理员",
       "createdAt": "2026-03-29T03:07:50.487Z"
     },
     {
       "externalNullifier": "vote-1774755046",
-      "name":"test3",
-      "descrption":"test4",
+      "name": "社团经费表决",
+      "descrption": "用于演示社团活动经费审批的匿名投票。",
+      "startAt": "2026-03-28T08:00:00.000Z",
+      "endAt": "2026-04-05T08:00:00.000Z",
+      "maxVoters": 60,
+      "createdBy": "财务委员会",
       "createdAt": "2026-03-29T03:30:46.423Z"
     },
     {
       "externalNullifier": "vote-1774755068",
-      "name":"test5",
-      "descrption":"test6",
+      "name": "宿舍管理提案",
+      "descrption": "用于演示宿舍管理规则调整提案的匿名投票。",
+      "startAt": "2026-04-15T08:00:00.000Z",
+      "endAt": "2026-04-20T08:00:00.000Z",
+      "maxVoters": 80,
+      "createdBy": "学生会",
       "createdAt": "2026-03-29T03:31:08.807Z"
+    },
+    {
+      "externalNullifier": "campus",
+      "name": "校园活动示例",
+      "descrption": "这是一个带有完整元数据的示例活动，可用于测试前端展示与状态控制。",
+      "startAt": "2026-03-30T08:00:00.000Z",
+      "endAt": "2026-04-30T08:00:00.000Z",
+      "maxVoters": 120,
+      "createdBy": "研究示例账号",
+      "createdAt": "2026-03-30T04:05:09.060Z"
+    },
+    {
+      "externalNullifier": "vote-chain-1774850571092",
+      "name": "",
+      "descrption": "",
+      "startAt": null,
+      "endAt": null,
+      "maxVoters": null,
+      "createdBy": "",
+      "createdAt": "2026-03-30T06:02:51.160Z"
+    },
+    {
+      "externalNullifier": "vote-chain-1774850615192",
+      "name": "",
+      "descrption": "",
+      "startAt": null,
+      "endAt": null,
+      "maxVoters": null,
+      "createdBy": "",
+      "createdAt": "2026-03-30T06:03:35.235Z"
+    },
+    {
+      "externalNullifier": "vote-chain-1774850667404",
+      "name": "",
+      "descrption": "",
+      "startAt": null,
+      "endAt": null,
+      "maxVoters": null,
+      "createdBy": "",
+      "createdAt": "2026-03-30T06:04:27.439Z"
+    },
+    {
+      "externalNullifier": "campus_budget-211",
+      "name": "校园预算投票",
+      "descrption": "关于校园预算的一次投票",
+      "startAt": "2026-03-22T06:13:00.000Z",
+      "endAt": null,
+      "maxVoters": null,
+      "createdBy": "",
+      "createdAt": "2026-03-30T06:13:51.389Z"
     }
   ]
 }

@@ -2,18 +2,19 @@ import { computed, reactive } from "vue"
 import {
   getActivities,
   getActivityStats,
+  getChainStatus,
   getMerkleProof,
   getRootInfo,
+  prepareVote,
   publishActivity,
+  recordVote,
   registerPhone,
   submitVote as submitVoteRequest,
 } from "../services/api"
 import { LOCAL_IDENTITY_KEY, STATUS } from "../constants/app"
 
 function safeStorageGet() {
-  if (typeof window === "undefined") {
-    return null
-  }
+  if (typeof window === "undefined") return null
 
   try {
     const raw = window.localStorage.getItem(LOCAL_IDENTITY_KEY)
@@ -24,18 +25,12 @@ function safeStorageGet() {
 }
 
 function safeStorageSet(value) {
-  if (typeof window === "undefined") {
-    return
-  }
-
+  if (typeof window === "undefined") return
   window.localStorage.setItem(LOCAL_IDENTITY_KEY, JSON.stringify(value))
 }
 
 function safeStorageClear() {
-  if (typeof window === "undefined") {
-    return
-  }
-
+  if (typeof window === "undefined") return
   window.localStorage.removeItem(LOCAL_IDENTITY_KEY)
 }
 
@@ -46,6 +41,7 @@ const state = reactive({
     leafCount: 0,
   },
   activities: [],
+  chainInfo: null,
   localIdentity: safeStorageGet(),
   registerStatus: STATUS.IDLE,
   voteStatus: STATUS.IDLE,
@@ -72,11 +68,17 @@ async function refreshActivities() {
   return state.activities
 }
 
+async function refreshChainInfo() {
+  const data = await getChainStatus()
+  state.chainInfo = data.chain ?? null
+  return state.chainInfo
+}
+
 async function loadDashboard() {
   state.globalStatus = STATUS.LOADING
 
   try {
-    await Promise.all([refreshRootInfo(), refreshActivities()])
+    await Promise.all([refreshRootInfo(), refreshActivities(), refreshChainInfo()])
     state.globalStatus = STATUS.SUCCESS
   } catch (error) {
     state.globalStatus = STATUS.ERROR
@@ -117,7 +119,7 @@ async function registerWithPhone(phone) {
   } catch (error) {
     if (error.status === 409) {
       state.registerMessage =
-        "该手机号已注册。若当前浏览器未保存身份信息，将无法继续投票。"
+        "该手机号已经注册。如果当前浏览器中没有保存身份信息，将无法继续投票。"
     } else {
       state.registerMessage = error.message || "注册失败"
     }
@@ -132,13 +134,13 @@ function restoreIdentityFromStorage(phone = "") {
 
   if (!saved) {
     setRegisterError(
-      "当前浏览器没有保存匿名身份，无法恢复。请使用原浏览器继续，或清空该手机号后重新演示。"
+      "当前浏览器中没有保存匿名身份，无法恢复。请使用原浏览器继续，或清理该手机号后重新演示。"
     )
     return null
   }
 
   if (phone && saved.phone !== phone) {
-    setRegisterError("本地保存的身份手机号与当前输入不一致。")
+    setRegisterError("本地保存的手机号与当前输入不一致。")
     return null
   }
 
@@ -162,8 +164,9 @@ async function publishNewActivity(activity) {
   try {
     const data = await publishActivity(activity)
     state.publishStatus = STATUS.SUCCESS
-    state.publishMessage = "活动发布成功，用户端现在可以参与投票。"
+    state.publishMessage = "活动发布成功，用户现在可以参与投票。"
     await refreshActivities()
+    await refreshChainInfo()
     return data
   } catch (error) {
     state.publishStatus = STATUS.ERROR
@@ -174,7 +177,7 @@ async function publishNewActivity(activity) {
 
 async function submitVote({ externalNullifier, vote }) {
   if (!state.localIdentity?.phone) {
-    const error = new Error("当前浏览器没有可用身份，请先注册或恢复身份。")
+    const error = new Error("当前浏览器中没有可用身份，请先注册或恢复身份。")
     state.voteStatus = STATUS.ERROR
     state.voteMessage = error.message
     throw error
@@ -199,8 +202,8 @@ async function submitVote({ externalNullifier, vote }) {
     const result = await submitVoteRequest(payload)
     state.lastVoteResult = result
     state.voteStatus = STATUS.SUCCESS
-    state.voteMessage = "证明已生成并记录成功。"
-    await Promise.all([refreshActivities(), refreshRootInfo()])
+    state.voteMessage = "证明已生成并提交成功。"
+    await Promise.all([refreshActivities(), refreshRootInfo(), refreshChainInfo()])
     return result
   } catch (error) {
     state.voteStatus = STATUS.ERROR
@@ -209,8 +212,58 @@ async function submitVote({ externalNullifier, vote }) {
   }
 }
 
-async function fetchActivityStats(externalNullifier) {
-  return getActivityStats(externalNullifier)
+async function prepareVoteWithClientWallet({ externalNullifier, vote }) {
+  if (!state.localIdentity?.phone) {
+    const error = new Error("当前浏览器中没有可用身份，请先注册或恢复身份。")
+    state.voteStatus = STATUS.ERROR
+    state.voteMessage = error.message
+    throw error
+  }
+
+  state.voteStatus = STATUS.LOADING
+  state.voteMessage = ""
+  state.lastVoteResult = null
+
+  try {
+    const proof = await getMerkleProof(state.localIdentity.phone)
+    const payload = {
+      identityNullifier: state.localIdentity.identityNullifier,
+      identityTrapdoor: state.localIdentity.identityTrapdoor,
+      treePathElements: proof.pathElements,
+      treePathIndices: proof.pathIndices,
+      root: proof.root,
+      externalNullifier,
+      vote,
+    }
+
+    return await prepareVote(payload)
+  } catch (error) {
+    state.voteStatus = STATUS.ERROR
+    state.voteMessage = error.message || "准备链上投票失败"
+    throw error
+  }
+}
+
+async function confirmClientVote(result) {
+  const payload = {
+    externalNullifier: result.voteRecord.externalNullifier,
+    vote: result.voteRecord.vote,
+    nullifierHash: result.nullifierHash,
+    signalHash: result.signalHash,
+    onChain: result.onChain,
+    metrics: result.metrics ?? null,
+  }
+
+  const recorded = await recordVote(payload)
+  state.lastVoteResult = { ...result, voteRecord: recorded.voteRecord }
+  state.voteStatus = STATUS.SUCCESS
+  state.voteMessage = "钱包交易已确认，投票记录已同步。"
+  await Promise.all([refreshActivities(), refreshRootInfo(), refreshChainInfo()])
+  return state.lastVoteResult
+}
+
+async function fetchActivityStats(externalNullifier, options = {}) {
+  return getActivityStats(externalNullifier, options)
 }
 
 export function useVoting() {
@@ -222,11 +275,14 @@ export function useVoting() {
     loadDashboard,
     refreshActivities,
     refreshRootInfo,
+    refreshChainInfo,
     registerWithPhone,
     restoreIdentityFromStorage,
     clearIdentity,
     publishNewActivity,
     submitVote,
+    prepareVoteWithClientWallet,
+    confirmClientVote,
     fetchActivityStats,
     setRegisterError,
     setPublishError,
